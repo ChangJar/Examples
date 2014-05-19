@@ -68,7 +68,7 @@ void security(int sock)
     }
 
     /* load CA certificates into CyaSSL_CTX. which will verify the server */
-    if (CyaSSL_CTX_load_verify_locations(ctx, "../certs/ca-cert.pem",0) != 
+    if (CyaSSL_CTX_load_verify_locations(ctx, "./ca-cert.pem",0) != 
             SSL_SUCCESS) {
         printf("Error loading ./certs/ca-cert.pem. Please check the file.\n");
         exit(EXIT_FAILURE);
