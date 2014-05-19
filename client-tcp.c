@@ -41,7 +41,7 @@ int main(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     printf("Message for server:\t");
-    scanf("%s",send);
+    fgets(send,MAXDATASIZE,stdin);
     msg = send;
     /* If the message is not able to send */
     if(write(sockfd, msg, strlen(msg)) != strlen(msg)) {
