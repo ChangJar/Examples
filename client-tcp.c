@@ -7,6 +7,24 @@
 #define MAXDATASIZE  4096   /* Maximum acceptable amount of data */
 #define SERV_PORT    11111  /* Define default port number */
 
+void clientHello(int sock)
+{
+    char send[MAXDATASIZE], recieve[MAXDATASIZE];
+
+    printf("Message for server:\t");
+    fgets(send,MAXDATASIZE,stdin);
+    /* If the message is not able to send */
+    if(write(sock, send, strlen(send)) != strlen(send)) {
+        printf("Writte error: errno: %i\n", errno);
+        exit(EXIT_FAILURE);
+    }
+    /* If the server fails to send data */
+    if(read(sock, recieve, MAXDATASIZE) == 0) {
+        printf("Read error. errno: %i\n", errno);
+        exit(EXIT_FAILURE);
+    }
+    printf("Recieved: \t%s\n", recieve); /* Print data sent from the server */
+}
 /* Command line argumentCount and argumentValues */
 int main(int argc, char** argv) 
 {
@@ -40,19 +58,6 @@ int main(int argc, char** argv)
         printf("Connect error. errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    printf("Message for server:\t");
-    fgets(send,MAXDATASIZE,stdin);
-    msg = send;
-    /* If the message is not able to send */
-    if(write(sockfd, msg, strlen(msg)) != strlen(msg)) {
-        printf("Writte error: errno: %i\n", errno);
-        exit(EXIT_FAILURE);
-    }
-    /* If the server fails to send data */
-    if(read(sockfd, recieve, MAXDATASIZE) == 0) {
-        printf("Read error. errno: %i\n", errno);
-        exit(EXIT_FAILURE);
-    }
-    printf("Recieved: \t%s\n", recieve); /* Print data sent from the server */
+    clientHello(sockfd);
     return 0;
 } 

@@ -11,11 +11,9 @@
 void clientHello(int sock, CYASSL* ssl)
 {
     char send[MAXDATASIZE], recieve[MAXDATASIZE];   /*Data sent, data revieved*/
-    char* msg;                                      /* pointer for data */
 
     printf("Message for server:\t");
-    scanf("%s",send);
-    msg = send;
+    fgets(send,MAXDATASIZE,stdin);
     /* If the message is not able to send */
     if(CyaSSL_write(ssl, msg, strlen(msg)) != strlen(msg)) {
         printf("Writte error: errno: %i\n", errno);
