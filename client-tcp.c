@@ -4,16 +4,16 @@
 #include    <errno.h>
 #include    <arpa/inet.h>
 
-#define SERV_PORT   11111   /* Define default port number */
-#define MAXDATASIZE 4096    /* Maximum acceptable amount of data */
+#define MAXDATASIZE  4096   /* Maximum acceptable amount of data */
+#define SERV_PORT    11111  /* Define default port number */
 
 /* Command line argumentCount and argumentValues */
 int main(int argc, char** argv) 
 {
     int     sockfd;                             /* Socket File Discriptor */
     struct  sockaddr_in servAddr;               /* Struct for Server Address */
-    char    send[] = "Initiating Contact...";   /* Data sent to server */
-    char*   msg = send;                         /* Pointer for data */
+    char    send[MAXDATASIZE];                  /* Data sent to server */
+    char*   msg;                   /* Pointer for data */
     char    recieve[MAXDATASIZE];               /* Recived data from server*/
 
     /* if the number of arguments is not two, error */
@@ -40,17 +40,19 @@ int main(int argc, char** argv)
         printf("Connect error. errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    printf("%s\n",msg);
+    printf("Message for server:\t");
+    scanf("%s",send);
+    msg = send;
     /* If the message is not able to send */
     if(write(sockfd, msg, strlen(msg)) != strlen(msg)) {
         printf("Writte error: errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    /* If the server fails to return data */
+    /* If the server fails to send data */
     if(read(sockfd, recieve, MAXDATASIZE) == 0) {
         printf("Read error. errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    printf("Recieved: %s\n",recieve); /* Print data recieved from the server */
+    printf("Recieved: \t%s\n", recieve); /* Print data sent from the server */
     return 0;
 } 
