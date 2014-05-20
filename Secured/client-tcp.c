@@ -34,28 +34,28 @@
 void ClientGreet(int sock, CYASSL* ssl)
 {
     /* data to send to the server, data recieved from the server */
-    char send[MAXDATASIZE], recieve[MAXDATASIZE];
+    char send[MAXDATASIZE], receive[MAXDATASIZE];
 
     printf("Message for server:\t");
     fgets(send, MAXDATASIZE, stdin);
 
     if (CyaSSL_write(ssl, send, strlen(send)) != strlen(send)) {
         /* the message is not able to send, or error trying */
-        printf("Writte error: errno: %i\n", errno);
+        printf("Write error: errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
 
-    if (CyaSSL_read(ssl, recieve, MAXDATASIZE) == 0) {
+    if (CyaSSL_read(ssl, receive, MAXDATASIZE) == 0) {
         /* the server failed to send data, or error trying */
         printf("Read error. errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    printf("Recieved: \t%s\n", recieve);
+    printf("Recieved: \t%s\n", receive);
 }
 /* 
  * applies TLS 1.2 security layer to data being sent.
  */
-void security(int sock)
+void Security(int sock)
 {
     CyaSSL_Init();      /* initialize CyaSSL (must be done first) */
     CYASSL_CTX* ctx;
@@ -122,7 +122,7 @@ int main(int argc, char** argv)
         printf("Connect error. errno: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    security(sockfd);
+    Security(sockfd);
     return 0;
 }
 

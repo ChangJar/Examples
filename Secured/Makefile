@@ -1,7 +1,7 @@
 CC=gcc
 
 client-tcp: client-tcp.c
-	$(CC) -o client-tcp client-tcp.c -I -lm -lcyassl
+	$(CC) -o client-tcp client-tcp.c -lcyassl
 
 .PHONY: clean
 
