@@ -1,4 +1,4 @@
-/* client-tcp.c
+/* client-tls.c
  *
  * Copyright (C) 2006-2014 wolfSSL Inc.
  *

@@ -37,7 +37,6 @@ void ClientGreet(int sock, CYASSL* ssl)
     /* data to send to the server, data recieved from the server */
     char send[MAXDATASIZE], receive[MAXDATASIZE];
     int err = 10;
-    char exit[] = "exit";
 
     printf("Message for server:\t");
     fgets(send, MAXDATASIZE, stdin);
@@ -119,6 +118,7 @@ int main(int argc, char** argv)
     /* looks for the server at the entered address (ip in the command line) */
     inet_pton(AF_INET, argv[1], &servAddr.sin_addr);
 
+    /* keeps trying to connect to the socket until it is able to do so */
     while (err != 0) 
         err = connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)); 
 
