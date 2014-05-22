@@ -24,7 +24,7 @@
 #include    <errno.h>
 #include    <arpa/inet.h>
 #include    <cyassl/ssl.h>          /* cyaSSL security library */
-#include    <fcntl.h>
+#include    <fcntl.h>               /* nonblocking I/O library */
 
 #define MAXDATASIZE  4096   /* maximum acceptable amount of data */
 #define SERV_PORT    11111  /* define default port number */
@@ -37,12 +37,15 @@ void ClientGreet(int sock, CYASSL* ssl)
     /* data to send to the server, data recieved from the server */
     char send[MAXDATASIZE], receive[MAXDATASIZE];
     int err = 10;
-    printf("Message for server:\t");
-    fgets(send, MAXDATASIZE, stdin);
+    char exit[] = "exit";
+
+    while(strcmp(send, exit-1) != 0) {
+        printf("Message for server:\t");
+        fgets(send, MAXDATASIZE, stdin);
     
-    err = CyaSSL_write(ssl, send, strlen(send));
-    /* continue trying to send if getting an error trying */
-    while(err == SSL_FATAL_ERROR) 
+        err = CyaSSL_write(ssl, send, strlen(send));
+        /* continue trying to send if getting an error trying */
+        while(err == SSL_FATAL_ERROR) 
         err = CyaSSL_write(ssl, send, strlen(send));
     
     err = CyaSSL_read(ssl, receive, MAXDATASIZE);
@@ -50,6 +53,7 @@ void ClientGreet(int sock, CYASSL* ssl)
     while(err == SSL_FATAL_ERROR) 
         err = CyaSSL_read(ssl, receive, MAXDATASIZE);
     printf("Recieved: \t%s\n", receive);
+    }
 }
 /* 
  * applies TLS 1.2 security layer to data being sent.
@@ -84,18 +88,6 @@ void Security(int sock)
     CyaSSL_CTX_free(ctx);
     CyaSSL_Cleanup();
 }
-int setNonblocking(int sock)
-{
-    int flags;
-#if defined(O_NONBLOCK)
-    if (-1 == (flags = fcntl(sock, F_GETFL, 0)))
-        flags = 0;
-    return fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-#else
-    flags = 1;
-    return ioctl(sock, FIONBIO, &flags);
-#endif
-}
 /* 
  * Command line argumentCount and argumentValues 
  */
@@ -117,7 +109,8 @@ int main(int argc, char** argv)
         printf("Failed to create socket. errono: %i\n", errno);
         exit(EXIT_FAILURE);
     }
-    setNonblocking(sockfd);
+    /* sets socket to non-blocking */
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
     /* clears memory block for use */
     bzero(&servAddr, sizeof(servAddr));    
     /* sets addressfamily to internet*/
