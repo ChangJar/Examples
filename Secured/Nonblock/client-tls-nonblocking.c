@@ -39,21 +39,19 @@ void ClientGreet(int sock, CYASSL* ssl)
     int err = 10;
     char exit[] = "exit";
 
-    while(strcmp(send, exit-1) != 0) {
-        printf("Message for server:\t");
-        fgets(send, MAXDATASIZE, stdin);
-    
+    printf("Message for server:\t");
+    fgets(send, MAXDATASIZE, stdin);
+
+    err = CyaSSL_write(ssl, send, strlen(send));
+    /* continue trying to send if getting an error trying */
+    while(err == SSL_FATAL_ERROR) 
         err = CyaSSL_write(ssl, send, strlen(send));
-        /* continue trying to send if getting an error trying */
-        while(err == SSL_FATAL_ERROR) 
-        err = CyaSSL_write(ssl, send, strlen(send));
-    
+
     err = CyaSSL_read(ssl, receive, MAXDATASIZE);
     /* continue trying to recive if getting an error trying */
     while(err == SSL_FATAL_ERROR) 
         err = CyaSSL_read(ssl, receive, MAXDATASIZE);
     printf("Recieved: \t%s\n", receive);
-    }
 }
 /* 
  * applies TLS 1.2 security layer to data being sent.
@@ -123,7 +121,7 @@ int main(int argc, char** argv)
 
     while (err != 0) 
         err = connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)); 
-    
+
     Security(sockfd);
     return 0;
 }
