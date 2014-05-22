@@ -1,9 +1,9 @@
 CC=gcc
 
-client-tcp-resume: client-tcp-resume.c
-	$(CC) -o client-tcp-resume client-tcp-resume.c -lcyassl
+client-tls-resume: client-tls-resume.c
+	$(CC) -o client-tls-resume client-tls-resume.c -lcyassl
 
 .PHONY: clean
 
 clean:
-	rm -f client-tcp-resume
+	rm -f client-tls-resume

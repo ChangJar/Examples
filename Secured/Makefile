@@ -1,9 +1,9 @@
 CC=gcc
 
-client-tcp: client-tcp.c
-	$(CC) -o client-tcp client-tcp.c -lcyassl
+client-tls: client-tls.c
+	$(CC) -o client-tls client-tls.c -lcyassl
 
 .PHONY: clean
 
 clean:
-	rm -f client-tcp
+	rm -f client-tls

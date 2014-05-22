@@ -78,8 +78,8 @@ void Security(int sock)
         exit(EXIT_FAILURE);
     }
     CyaSSL_set_fd(ssl, sock);
+    CyaSSL_connect(ssl);
     ClientGreet(sock, ssl);
-
     /* frees all data before client termination */
     CyaSSL_free(ssl);
     CyaSSL_CTX_free(ctx);
