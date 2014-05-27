@@ -27,7 +27,7 @@
 #include    <cyassl/ssl.h>          /* cyaSSL security library */
 #include    <cyassl/ctaocrypt/aes.h>
 
-int aes_test(char* fileIn, char* fileOut, byte* keys)
+int aes_test(char* fileIn, char* fileOut, byte* key)
 {
     FILE* input =   fopen(fileIn, "r");
     FILE* output =  fopen(fileOut, "w");
@@ -36,26 +36,23 @@ int aes_test(char* fileIn, char* fileOut, byte* keys)
     Aes dec;
     
     fseek(input, 0, SEEK_END);
-    long len = ftell(input);
-    byte msg[len];
+    long length = ftell(input);
+    byte msg[length];
+    fseek(input, 0, SEEK_SET);
+    fread(msg, 1, length, input);
 
-    const byte verify[] = {
-        0x95,0x94,0x92,0x57,0x5f,0x42,0x81,0x53,
-        0x2c,0xcc,0x9d,0x46,0x77,0xa2,0x33,0xcb
-    };
-
-    byte key[] = {
-        0x95,0x94,0x92,0x57,0x5f,0x42,0x81,0x53,
-        0x2c,0xcc,0x9d,0x46,0x77,0xa2,0x33,0xcb
-    };
-    byte iv[]  = {
-        0x96,0x94,0x92,0x57,0x5f,0x42,0x81,0x53,
-        0x2c,0xcc,0x9d,0x46,0x77,0xa2,0x33,0xcb
-    };
+    byte iv[]  = "1234567890abcdef   ";
     
     byte cipher[AES_BLOCK_SIZE * 4];
     byte plain [AES_BLOCK_SIZE * 4];
     int ret;
+   
+    ret = AesSetIV(&enc, iv);
+    if (ret != 0)
+        return -9001;
+    ret = AesSetIV(&dec, iv);
+    if (ret != 0)
+        return -9002;
 
     ret = AesSetKey(&enc, key, AES_BLOCK_SIZE, iv, AES_ENCRYPTION);
     if (ret != 0)
@@ -64,22 +61,18 @@ int aes_test(char* fileIn, char* fileOut, byte* keys)
     if (ret != 0)
         return -1002;
 
-    ret = AesCbcEncrypt(&enc, cipher, msg, AES_BLOCK_SIZE);
+    ret = AesCbcEncrypt(&enc, cipher, msg, length);//AES_BLOCK_SIZE * 2);
     if (ret != 0)
         return -1005;
-    ret = AesCbcDecrypt(&dec, plain, cipher, AES_BLOCK_SIZE);
+    ret = AesCbcDecrypt(&dec, plain, cipher, length);//AES_BLOCK_SIZE * 2);
     if (ret != 0)
         return -1006;
-
-    if (memcmp(plain, msg, AES_BLOCK_SIZE))
+    
+    ret = memcmp(plain, msg, AES_BLOCK_SIZE * 2);
+    if (ret != 0)
         return -60;
 
-    if (memcmp(cipher, verify, AES_BLOCK_SIZE))
-        return -61;
-
-    fseek(input, 0, SEEK_SET);
-    fread(msg, 1, len, input);
-    fprintf(output, "%s", msg);
+    fwrite(plain, 1, length, output);
     fclose(input);
     fclose(output);
     return 0;
@@ -89,11 +82,12 @@ int main(int argc, char** argv)
 {
     byte key[] = "0123456789abcdef   ";
     if (argc != 4 && argc != 3)
-        printf("Error: v dvnn fvcked vp\n");
+        printf("Usage: ./aes-file-encrypt <file.in> <file.out> <key(Optnl)>\n");
     else if (argc == 4) 
         strcpy(key, argv[3]);
    
-    aes_test(argv[1], argv[2], key);
+    int err = aes_test(argv[1], argv[2], key);
+    printf("%d\n", err);
     return 0;
 }
 
