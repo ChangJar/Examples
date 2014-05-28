@@ -27,6 +27,8 @@
 #include    <cyassl/ssl.h>          /* cyaSSL security library */
 #include    <cyassl/ctaocrypt/aes.h>
 
+char choice;
+
 int aes_test(char* fileIn, char* fileOut, byte* key)
 {
     FILE* input =   fopen(fileIn, "r");
@@ -34,60 +36,106 @@ int aes_test(char* fileIn, char* fileOut, byte* key)
 
     Aes enc;
     Aes dec;
-    
-    fseek(input, 0, SEEK_END);
-    long length = ftell(input);
-    byte msg[length];
-    fseek(input, 0, SEEK_SET);
-    fread(msg, 1, length, input);
 
     byte iv[]  = "1234567890abcdef   ";
-    
-    byte cipher[AES_BLOCK_SIZE * 4];
-    byte plain [AES_BLOCK_SIZE * 4];
+
     int ret;
-   
-    ret = AesSetIV(&enc, iv);
-    if (ret != 0)
-        return -9001;
-    ret = AesSetIV(&dec, iv);
-    if (ret != 0)
-        return -9002;
 
-    ret = AesSetKey(&enc, key, AES_BLOCK_SIZE, iv, AES_ENCRYPTION);
-    if (ret != 0)
-        return -1001;
-    ret = AesSetKey(&dec, key, AES_BLOCK_SIZE, iv, AES_DECRYPTION);
-    if (ret != 0)
-        return -1002;
+    int numBlocks;
+    int msgLength;
+    fseek(input, 0, SEEK_END);
+    int length = ftell(input);
+    fseek(input, 0, SEEK_SET);
 
-    ret = AesCbcEncrypt(&enc, cipher, msg, length);//AES_BLOCK_SIZE * 2);
-    if (ret != 0)
-        return -1005;
-    ret = AesCbcDecrypt(&dec, plain, cipher, length);//AES_BLOCK_SIZE * 2);
-    if (ret != 0)
-        return -1006;
-    
-    ret = memcmp(plain, msg, AES_BLOCK_SIZE * 2);
-    if (ret != 0)
-        return -60;
+    msgLength = length;
+    while(length % AES_BLOCK_SIZE != 0) {
+        length++;
+    }
 
-    fwrite(plain, 1, length, output);
+    byte msg[length];
+
+    fread(msg, 1, length, input);
+    int i;
+    for (i = msgLength; i < length; i++) {
+        msg[i] = 0x20;
+    } 
+
+    numBlocks = length/AES_BLOCK_SIZE;
+    printf("numBlocks: %d\n", numBlocks);
+
+    byte cipher[AES_BLOCK_SIZE * numBlocks];
+    byte plain [AES_BLOCK_SIZE * numBlocks];
+
+    if (choice == 'e') {
+        ret = AesSetKey(&enc, key, AES_BLOCK_SIZE, iv, AES_ENCRYPTION);
+        if (ret != 0)
+            return -1001;
+
+        ret = AesCbcEncrypt(&enc, cipher, msg, length);
+        if (ret != 0)
+            return -1005;
+
+        fwrite(cipher, 1, length, output);
+
+    }
+    if (choice == 'd') {
+        ret = AesSetKey(&dec, key, AES_BLOCK_SIZE, iv, AES_DECRYPTION);
+        if (ret != 0)
+            return -1002;
+
+
+        ret = AesCbcDecrypt(&dec, plain, msg, length);
+        if (ret != 0)
+            return -1006;
+
+        fwrite(plain, 1, length, output);
+    }
+
     fclose(input);
     fclose(output);
+
     return 0;
 }
 
 int main(int argc, char** argv)
 {
-    byte key[] = "0123456789abcdef   ";
-    if (argc != 4 && argc != 3)
-        printf("Usage: ./aes-file-encrypt <file.in> <file.out> <key(Optnl)>\n");
-    else if (argc == 4) 
+    byte key[] = "0123456789abcdef   "; 
+    int err;
+    int option;
+
+    if (argc != 5 && argc != 4 && argc != 2)
+        printf("Usage: ./aes-file-encrypt <file.in>"
+                " <file.out> <key(Optional)> <-option>\n");
+    else if (argc == 5) 
         strcpy(key, argv[3]);
-   
-    int err = aes_test(argv[1], argv[2], key);
-    printf("%d\n", err);
+    else if (argc == 2)
+        choice = 'h';
+    if (choice == 'h') {
+        printf("\n~~~~~~~~~~~~~~~~~~~~Help~~~~~~~~~~~~~~~~~~~~~\n\n");
+        printf("Usage: ./aes-file-encrypt <file.in> <file.out>"
+                " <key(Optional)> <-option>\n\n");
+        printf("Options\n");
+        printf("-d    Decpription\n-e    Encryption\n-h    Help\n");
+    }
+    else {
+        while ((option = getopt(argc, argv, "deh:")) != -1) {
+            switch (option) {
+                case 'd':
+                    choice = 'd';
+                    break;
+                case 'e':
+                    choice = 'e';
+                    break;
+                case 'h':
+                    choice = 'h';
+                    break;
+                default:
+                    abort();
+            }
+        }
+        err = aes_test(argv[2], argv[3], key);
+        printf("%d\n", err);
+    }
     return 0;
 }
 
