@@ -19,11 +19,6 @@
  */
 
 #include    <stdio.h>
-#include    <stdlib.h>                  
-#include    <string.h>
-#include    <errno.h>
-#include    <arpa/inet.h>
-#include    <cyassl/ssl.h>          /* cyaSSL security library */
 #include    <cyassl/ctaocrypt/aes.h>
 
 char choice;                        /* option inputed in commandline */
