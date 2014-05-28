@@ -6,4 +6,4 @@ aes-file-encrypt: aes-file-encrypt.c
 .PHONY: clean
 
 clean:
-	find . \! -name aes-file-encrypt.c \! -name Makefile -delete
+	find . \! -name aes-file-encrypt.c \! -name Makefile \! -name README -delete
