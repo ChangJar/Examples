@@ -21,12 +21,12 @@
 #include    <stdio.h>
 #include    <cyassl/ctaocrypt/aes.h>
 
-char choice;                        /* option inputed in commandline */
+char choice;                            /* option inFileed in commandline */
 
 int AesTest(char* fileIn, char* fileOut, byte* key)
 {
-    FILE* input =   fopen(fileIn, "r"); /* file used to take message from */
-    FILE* output =  fopen(fileOut, "w");/*file used to write changed msg to  */
+    FILE* inFile =  fopen(fileIn, "r"); /* file used to take message from */
+    FILE* outFile = fopen(fileOut, "w");/* file used to write message to */
 
     Aes enc;                            /* AES for encoding */
     Aes dec;                            /* AES for decoding */
@@ -34,38 +34,36 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
     /* Initialization vector: used for randomness of encryption */
     byte iv[] = "onetwothreefour"; 		/* should be random or pseudorandom */
     int ret;                            /* return variable for errors */
-    int numBlocks;                      /* number of ASE blocks for encoding */
+    long numBlocks;                     /* number of ASE blocks for encoding */
+    int padCounter = 0;
+
+    /* finds the end of inFile to determine length */
+    fseek(inFile, 0, SEEK_END);
+    int inputLength = ftell(inFile);       /* length of message */
+    fseek(inFile, 0, SEEK_SET);
+    int length;                         /* length of input after padding */
     
-    /* finds the end of input to determine length */
-    fseek(input, 0, SEEK_END);
-    int msgLength = ftell(input);       /* length of message */
-    fseek(input, 0, SEEK_SET);
-    
-    int length;                         /* length of msg after padding */
-    
-    length = msgLength;    
-    /* increases the length until it evenly matches a block */
+    length = inputLength;    
+    /* pads the length until it evenly matches a block / increases pad number*/
     while(length % AES_BLOCK_SIZE != 0) {
         length++;
+        padCounter++;
     }
 
-    byte msg[length];                   /* actuall message */
+    byte input[length];                   /* actuall message */
 
-    /* reads from input and writes whatevers there to the msg array */
-    fread(msg, 1, length, input);
+    /* reads from inFile and writes whatevers there to the input array */
+    fread(input, 1, length, inFile);
 
     int i;                              /* loop counter */
-    for (i = msgLength; i < length; i++) {
-        /* padds the added characters with whitespace */
-        msg[i] = 0x20;
+    for (i = inputLength; i < length; i++) {
+        /* padds the added characters with the number of pads */
+        input[i] = 0%padCounter;
     } 
     /* finds the number of encoding blocks to be used */
     numBlocks = length/AES_BLOCK_SIZE;
-    /* printed out for error checking */
-    printf("numBlocks: %d\n", numBlocks);
 
-    byte cipher[AES_BLOCK_SIZE * numBlocks];/* encoded message[] */
-    byte plain [AES_BLOCK_SIZE * numBlocks];/* decoded message[] */
+    byte output[AES_BLOCK_SIZE * numBlocks];/* outFile message[] */
 
     if (choice == 'e') {
         /* if encryption was the chosen option */
@@ -74,13 +72,13 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
         if (ret != 0)
             return -1001;
 
-        /* encrypts the message to the cypher based on msg length+padding */
-        ret = AesCbcEncrypt(&enc, cipher, msg, length);
+        /* encrypts the message to the cypher based on input length+padding */
+        ret = AesCbcEncrypt(&enc, output, input, length);
         if (ret != 0)
             return -1005;
 
-        /* writes cipher on output file */
-        fwrite(cipher, 1, length, output);
+        /* writes output on outFile file */
+        fwrite(output, 1, length, outFile);
     }
     if (choice == 'd') {
         /* if decryption was the chosen option */
@@ -89,46 +87,43 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
         if (ret != 0)
             return -1002;
 
-        /* decrypts the message to plaintext based on msg length+padding */
-        ret = AesCbcDecrypt(&dec, plain, msg, length);
+        /* decrypts the message to outputtext based on input length+padding */
+        ret = AesCbcDecrypt(&dec, output, input, length);
         if (ret != 0)
             return -1006;
-        
-        /* writes plaintext to the ouput file */
-        fwrite(plain, 1, length, output);
+
+        int i;
+        for (i = AES_BLOCK_SIZE * (numBlocks - 1); i < length; i++) {
+            if(output[i] == output[length-1])
+                inputLength--;
+        }
+
+        /* writes outputtext to the ouput file */
+        fwrite(output, 1, inputLength, outFile);
     }
     /* closes the open files */
-    fclose(input);
-    fclose(output);
+    fclose(inFile);
+    fclose(outFile);
 
     return 0;
 }
-int main(int argc, char** argv)
-{
-    byte key[] = "0123456789abcdef   "; /* default key (changed in cmd line) */
-    int err;                            /* error variable */
-    int option;                         /* option chosen in command line */
-    
-    /* if the argument count isn't 2, 4, or 5 */
-    if (argc != 5 && argc != 4 && argc != 2)
-        printf("Usage: ./aes-file-encrypt <-option> <file.in>"
-                " <file.out> <key(Optional)>\n");
-    /* if there are 5 arguments, the last one is the key */
-    else if (argc == 5) 
-        strcpy(key, argv[4]);   /* copies the argument to the key */
-    /* if only two arguments are entered display 'help' becomes the choice */
-    else if (argc == 2)
-        choice = 'h';
-    /* if 'help' is the choice */
-    if (choice == 'h') {
-        printf("\n~~~~~~~~~~~~~~~~~~~~Help~~~~~~~~~~~~~~~~~~~~~\n\n");
-        printf("Usage: ./aes-file-encrypt <-option>  <file.in> <file.out>"
-                " <key(Optional)>\n\n");
+ void help()
+ {
+    printf("\n~~~~~~~~~~~~~~~~~~~~|Help|~~~~~~~~~~~~~~~~~~~~~\n\n");
+        printf("Usage: ./aes-file-encrypt <-option> <file.in> <file.out>"
+                " <key>\n\n");
         printf("Options\n");
         printf("-d    Decpription\n-e    Encryption\n-h    Help\n");
-    }
+ }
+ int main(int argc, char** argv)
+ {
+    int option;
+
+    if (argc != 5)
+        help();
+    /* if only two arguments are entered display 'help' becomes the choice */
     else {
-        while ((option = getopt(argc, argv, "de:")) != -1) {
+        while ((option = getopt(argc, argv, "deh:")) != -1) {
             switch (option) {
                 case 'd':
                     choice = 'd';
@@ -136,12 +131,14 @@ int main(int argc, char** argv)
                 case 'e':
                     choice = 'e';
                     break;
+                case 'h':
+                    help();
+                    break;
                 default:
                     abort();
             }
         }
-        err = AesTest(argv[2], argv[3], key);
-        printf("%d\n", err);
+        AesTest(argv[2], argv[3], argv[4]);
     }
     return 0;
-}
+ }
