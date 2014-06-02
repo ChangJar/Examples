@@ -21,7 +21,7 @@
 #include    <stdio.h>
 #include    <cyassl/ctaocrypt/aes.h>
 
-char choice;                            /* option inFileed in commandline */
+char choice;                            /* option entered in commandline */
 
 int AesTest(char* fileIn, char* fileOut, byte* key)
 {
@@ -35,7 +35,7 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
     byte iv[] = "onetwothreefour"; 		/* should be random or pseudorandom */
     int ret;                            /* return variable for errors */
     long numBlocks;                     /* number of ASE blocks for encoding */
-    int padCounter = 0;
+    int padCounter = 0;                 /* number of padded bytes */
 
     /* finds the end of inFile to determine length */
     fseek(inFile, 0, SEEK_END);
@@ -50,9 +50,9 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
         padCounter++;
     }
 
-    byte input[length];                   /* actuall message */
+    byte input[length];                   /* actual message */
 
-    /* reads from inFile and writes whatevers there to the input array */
+    /* reads from inFile and writes whatever is there to the input array */
     fread(input, 1, length, inFile);
 
     int i;                              /* loop counter */
@@ -66,42 +66,43 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
     byte output[AES_BLOCK_SIZE * numBlocks];/* outFile message[] */
 
     if (choice == 'e') {
-        /* if encryption was the chosen option */
-        /* set encryption key. must have key to decrypt */
+        /* if encryption was the chosen option 
+        set encryption key. must have key to decrypt */
         ret = AesSetKey(&enc, key, AES_BLOCK_SIZE, iv, AES_ENCRYPTION);
         if (ret != 0)
             return -1001;
 
-        /* encrypts the message to the cypher based on input length+padding */
+        /* encrypts the message to the ouput based on input length + padding */
         ret = AesCbcEncrypt(&enc, output, input, length);
         if (ret != 0)
             return -1005;
 
-        /* writes output on outFile file */
+        /* writes output to outFile */
         fwrite(output, 1, length, outFile);
     }
     if (choice == 'd') {
-        /* if decryption was the chosen option */
-        /* sets the key to use, if it matches the encryption key success */
+        /* if decryption was the chosen option
+        sets the key to use, if it matches the encryption key success */
         ret = AesSetKey(&dec, key, AES_BLOCK_SIZE, iv, AES_DECRYPTION);
         if (ret != 0)
             return -1002;
 
-        /* decrypts the message to outputtext based on input length+padding */
+        /* decrypts the message to output based on input length + padding */
         ret = AesCbcDecrypt(&dec, output, input, length);
         if (ret != 0)
             return -1006;
 
-        int i;
+        int i;                              /* loop counter */
+        /* checks the last block for padding */
         for (i = AES_BLOCK_SIZE * (numBlocks - 1); i < length; i++) {
             if(output[i] == output[length-1])
                 inputLength--;
         }
 
-        /* writes outputtext to the ouput file */
+        /* writes output to the outFile based on shortened length */
         fwrite(output, 1, inputLength, outFile);
     }
-    /* closes the open files */
+    /* closes the opened files */
     fclose(inFile);
     fclose(outFile);
 
@@ -119,19 +120,18 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
  {
     int option;
 
-    if (argc != 5)
+    if (argc != 5) /* if number of arguments is not 5 'help' */
         help();
-    /* if only two arguments are entered display 'help' becomes the choice */
     else {
         while ((option = getopt(argc, argv, "deh:")) != -1) {
             switch (option) {
-                case 'd':
+                case 'd': /* if entered decrypt */
                     choice = 'd';
                     break;
-                case 'e':
+                case 'e': /* if entered encrypt */
                     choice = 'e';
                     break;
-                case 'h':
+                case 'h': /* if entered 'help' */
                     help();
                     break;
                 default:

@@ -21,75 +21,92 @@
 #include <stdio.h>
 #include <cyassl/ctaocrypt/des3.h>
 
-#define DES3_BLOCK_SIZE 24
+#define DES3_BLOCK_SIZE 24               /* size of encryption blocks */
 
-char choice;
+char choice;                             /* option entered in commandline */
 
 int Des3Test(char* fileIn, char* fileOut, byte* key)
 {
-	FILE* inFile =	fopen(fileIn, "r");
-	FILE* outFile =	fopen(fileOut, "w");
+	FILE* inFile =	fopen(fileIn, "r"); /* file used to take message from */
+	FILE* outFile =	fopen(fileOut, "w");/* file used to write messge to */
 
-	Des3 enc;
-	Des3 dec;
+	Des3 enc;                           /* 3DES for encoding */
+	Des3 dec;                           /* 3DES for decoding */
 
-    byte iv[] = "onetwothreefour";
-	int ret;
-    long numBlocks;
-	long padCounter = 0;
+    /* Initialize vector: used for randomness of encryption */
+    byte iv[] = "onetwothreefour";      /* should be random or pseudorandom */
+	int ret;                            /* return variable for errors */
+    long numBlocks;                     /* number of encryption blocks */
+	long padCounter = 0;                /* number of padded bytes */
 
+    /* finds the end of inFile to determine length  */
 	fseek(inFile, 0, SEEK_END);
-    int inputLength = ftell(inFile);
+    int inputLength = ftell(inFile);    /* length of message */
     fseek(inFile, 0, SEEK_SET);
-    int length;
+    int length;                         /* length of input after padding */
 
     length = inputLength;
+    /* pads the length until it evenly matches a block / increases pad number */
     while (length % DES3_BLOCK_SIZE != 0) {
         length++;
         padCounter++;
     }
 
-    byte input[length];
+    byte input[length];                 /* actual message */
 
+    /* reads from inFile and wrties whatever is there to the input array */
     fread(input, 1, inputLength, inFile);
 
     int i;                              /* loop counter */
     for (i = inputLength; i < length; i++) {
-        /* padds the added characters with NULL */
+        /* padds the added characters with the number of pads */
         input[i] = 0%padCounter;
     }
+    /*  finds the number of encoding blocks to be used*/
     numBlocks = length/DES3_BLOCK_SIZE;
 
-    byte output[DES3_BLOCK_SIZE * numBlocks];
+    byte output[DES3_BLOCK_SIZE * numBlocks];/* outFile message[] */
 
-	if (choice == 'e')
-	{
-    ret = Des3_SetKey(&enc, key, iv, DES_ENCRYPTION);
-    if (ret != 0)
-        return -100;
+	if (choice == 'e') {
+        /* if encryption was the chosen option
+        set encryption key. must have key to decrypt */
+        ret = Des3_SetKey(&enc, key, iv, DES_ENCRYPTION);
+        if (ret != 0)
+            return -100;
+
+        /* encrypts the message to the ouput based on input length + padding */
 		ret = Des3_CbcEncrypt(&enc, output, input, length);
 		if (ret != 0)
 			return -200;
 
+        /* writes output to outFile */
 		fwrite(output, 1, length, outFile);
 	}
-	if (choice == 'd')
-	{
-    ret = Des3_SetKey(&dec, key, iv, DES_DECRYPTION);
-    if (ret != 0)
-        return -101;
+	if (choice == 'd') {
+        /* if decryption was the chosen option
+        sets the key to use, if it matches the encryption key success */
+        ret = Des3_SetKey(&dec, key, iv, DES_DECRYPTION);
+        if (ret != 0)
+            return -101;
+        /* decrypts the message to output based on input length + padding*/
 		ret = Des3_CbcDecrypt(&dec, output, input, length);
 		if (ret != 0)
 			return -201;
-        int i;
+
+        int i;                              /* loop counter */
+        /* checks the last block for padding */
         for (i = DES3_BLOCK_SIZE * (numBlocks - 1); i < length; i++) {
-            if (output[i] == output[length-1])
-                inputLength--;
+            if (output[i] == output[length-1])  /* if byte = lastByte */
+                inputLength--;                  /* reduce length of message */
         }
+
+        /* writes output to the outFile based on shortened length */
      	fwrite(output, 1, inputLength, outFile);
 	}
+    /* closes the opened files */
 	fclose(outFile);
 	fclose(inFile);
+
 	return 0;
 }
 void help()
@@ -104,19 +121,18 @@ int main(int argc, char** argv)
 {
 	int option;
 
-	if (argc != 5)
-    help();
-    /* if only two arguments are entered display 'help' becomes the choice */
+	if (argc != 5) /* if number of arguments is not 5 'help' */
+        help();
     else {
         while ((option = getopt(argc, argv, "deh:")) != -1) {
             switch (option) {
-                case 'd':
+                case 'd': /* if entered decrypt */
                     choice = 'd';
                     break;
-                case 'e':
+                case 'e': /* if entered encrypt */
                     choice = 'e';
                     break;
-                case 'h':
+                case 'h': /* if entered 'help' */
                 	help();
                 	break;
                 default:
