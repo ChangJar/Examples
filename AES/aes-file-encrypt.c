@@ -1,4 +1,4 @@
-/*aes-file-encrypt.c
+/* aes-file-encrypt.c
  *
  * Copyright (C) 2006-2014 wolfSSL Inc.
  * This file is part of CyaSSL.
@@ -15,7 +15,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,USA
  */
 
 #include    <stdio.h>
@@ -32,7 +32,7 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
     Aes dec;                            /* AES for decoding */
 
     /* Initialization vector: used for randomness of encryption */
-    byte iv[]  = "onetwothreefour";     /* should be random or pseudorandom */   
+    byte iv[] = "onetwothreefour"; 		/* should be random or pseudorandom */
     int ret;                            /* return variable for errors */
     int numBlocks;                      /* number of ASE blocks for encoding */
     
@@ -59,7 +59,6 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
         /* padds the added characters with whitespace */
         msg[i] = 0x20;
     } 
-
     /* finds the number of encoding blocks to be used */
     numBlocks = length/AES_BLOCK_SIZE;
     /* printed out for error checking */
@@ -82,7 +81,6 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
 
         /* writes cipher on output file */
         fwrite(cipher, 1, length, output);
-
     }
     if (choice == 'd') {
         /* if decryption was the chosen option */
@@ -105,7 +103,6 @@ int AesTest(char* fileIn, char* fileOut, byte* key)
 
     return 0;
 }
-
 int main(int argc, char** argv)
 {
     byte key[] = "0123456789abcdef   "; /* default key (changed in cmd line) */
@@ -148,4 +145,3 @@ int main(int argc, char** argv)
     }
     return 0;
 }
-
