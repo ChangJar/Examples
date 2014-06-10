@@ -30,68 +30,70 @@
 /*
  *  clients initial contact with server. Socket to connect to: sock
  */
-void ClientGreet(int sock)
+int ClientGreet(int sock)
 {
     /* data to send to the server, data recieved from the server */
-    char send[MAXDATASIZE], recieve[MAXDATASIZE];
+    char    sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE];
+    int     err;
 
     printf("Message for server:\t");
-    fgets(send, MAXDATASIZE, stdin);
+    fgets(sendBuff, MAXDATASIZE, stdin);
 
-    if (write(sock, send, strlen(send)) != strlen(send)) {
+    if (write(sock, sendBuff, strlen(sendBuff)) != strlen(sendBuff)) {
         /* the message is not able to send, or error trying */
-        printf("Write error: errno: %i\n", errno);
-        exit(EXIT_FAILURE);
+        err = errno;
+        printf("Write error: errno: %i\n", err);
+        return EXIT_FAILURE;
     }
 
-    if (read(sock, recieve, MAXDATASIZE) == 0) {
+    if (read(sock, rcvBuff, MAXDATASIZE) < 0) {
         /* the server fails to send data, or error trying */
-        printf("Read error. errno: %i\n", errno);
-        exit(EXIT_FAILURE);
+        err = errno;
+        printf("Read error. errno: %i\n", err);
+        return EXIT_FAILURE;
     }
-
-    printf("Recieved: \t%s\n", recieve);
+    printf("Recieved: \t%s\n", rcvBuff);
+    return 0;
 }
-
 /* 
  * command line argumentCount and argumentValues 
  */
 int main(int argc, char** argv) 
 {
-    int     sockfd;                             /* socket file discriptor */
-    struct  sockaddr_in servAddr;               /* Struct for Server Address */
+    int     sockfd;                         /* socket file descriptor */
+    struct  sockaddr_in servAddr;           /* struct for server address */
+    int     err;                            /* variable for error checks */
 
     if (argc != 2) {
         /* if the number of arguments is not two, error */
         printf("usage: ./client-tcp  <IP address>\n");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     /* internet address family, stream based tcp, default protocol */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
     if (sockfd < 0) {
         printf("Failed to create socket. errono: %i\n", errno);
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
-    /* clears memory block for use */
-    bzero(&servAddr, sizeof(servAddr));
-
-    /* sets addressfamily to internet*/
-    servAddr.sin_family = AF_INET;  
-
-    /* sets port to defined port */
-    servAddr.sin_port = htons(SERV_PORT);
+    memset(&servAddr, 0, sizeof(servAddr)); /* clears memory block for use */
+    servAddr.sin_family = AF_INET;          /* sets addressfamily to internet*/
+    servAddr.sin_port = htons(SERV_PORT);   /* sets port to defined port */
 
     /* looks for the server at the entered address (ip in the command line) */
-    inet_pton(AF_INET, argv[1], &servAddr.sin_addr);
+    if (inet_pton(AF_INET, argv[1], &servAddr.sin_addr) < 1) {
+        /* checks validity of address */
+        err = errno;
+        printf("Invalid Address. errno: %i\n", err);
+        return EXIT_FAILURE;
+    }
 
     if (connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
-        printf("Connect error. errno: %i\n", errno);
-        exit(EXIT_FAILURE);
+        err = errno;
+        printf("Connect error. errno: %i\n", err);
+        return EXIT_FAILURE;
     }
     ClientGreet(sockfd);
     return 0;
 }
-

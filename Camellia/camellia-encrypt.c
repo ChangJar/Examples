@@ -19,13 +19,23 @@
  */
 #include <stdio.h>
 #include <unistd.h>
+#include <termios.h>
 #include <cyassl/options.h>
 #include <cyassl/ctaocrypt/random.h>
+#include <cyassl/ctaocrypt/pwdbased.h>
 #include <cyassl/ctaocrypt/camellia.h>
 
 char choice;
 
-int CamelliaTest(char* fileIn, char* fileOut, byte* key)
+void GenerateKey(byte* key, char* sz, byte* salt)
+{
+    RNG rng;
+    int size = atoi(sz);
+
+    RNG_GenerateBlock(&rng, salt, 8);
+    PBKDF2(key, key, sizeof(key), salt, 8, 4096, size, MD5);
+}
+int CamelliaTest(char* fileIn, char* fileOut, byte* key, char* size)
 {
     FILE* inFile =  fopen(fileIn, "ra");/* file used to take message from */
     FILE* outFile = fopen(fileOut, "wa");/* file made to wrtie message to */
@@ -35,16 +45,16 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key)
 
     /* Initialization vector: used for randomness of encryption */
     byte iv[CAMELLIA_BLOCK_SIZE];       /* should be random or pseudorandom */
-    int i;                              /* loop counter */
-    int ret;                            /* return variable for errors */
-    long numBlocks;                     /* number of ASE blocks for encoding */
+    int i = 0;                          /* loop counter */
+    int ret = 0;                        /* return variable for errors */
+    long numBlocks = 0;                 /* number of ASE blocks for encoding */
     int padCounter = 0;                 /* number of padded bytes */
 
     /* finds the end of inFile to determine length */
     fseek(inFile, 0, SEEK_END);
-    int inputLength = ftell(inFile);       /* length of message */
+    int inputLength = ftell(inFile);    /* length of message */
     fseek(inFile, 0, SEEK_SET);
-    int length;                            /* length of input after padding */
+    int length;                         /* length of input after padding */
     
     length = inputLength;    
     /* pads the length until it evenly matches a block / increases pad number*/
@@ -53,7 +63,8 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key)
         padCounter++;
     }
 
-    byte input[length];                   /* actual message */
+    byte input[length];                 /* actual message */
+    byte salt[8];
 
     /* reads from inFile and writes whatever is there to the input array */
     fread(input, 1, inputLength, inFile);
@@ -72,10 +83,14 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key)
         RNG_GenerateBlock(&rng, iv, CAMELLIA_BLOCK_SIZE);
         /* sets new randomized iv */
         CamelliaSetIV(&cam, iv);
+        /* stretches key to fit size */
+        GenerateKey(key, size, salt);
         /* sets key */
         CamelliaSetKey(&cam, key, CAMELLIA_BLOCK_SIZE, iv);
         /* encrypts the message to the ouput based on input length + padding */
         CamelliaCbcEncrypt(&cam, output, input, length);
+        /* writes salt to outFile */
+        fwrite(salt, 1, sizeof(salt), outFile);
         /* writes iv to outFile */
         fwrite(iv, 1, CAMELLIA_BLOCK_SIZE, outFile);
         /* writes output to outFile */
@@ -83,29 +98,38 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key)
     }
     if (choice == 'd') {
         /* if decryption was the chosen option */
-        for (i = 0; i < CAMELLIA_BLOCK_SIZE; i++) {
+        for (i = 0; i < sizeof(salt); i++) {
+            /* finds salt from input message */
+            salt[i] = input[i];
+        }
+        for (i = sizeof(salt); i < CAMELLIA_BLOCK_SIZE + sizeof(salt); i++) {
             /* finds iv from input message */
-            iv[i] = input[i];
+            iv[i - sizeof(salt)] = input[i];
         }
         /* sets iv to found iv */
         CamelliaSetIV(&cam, iv);
+        /* replicates old key */
+        PBKDF2(key, key, sizeof(key), salt, sizeof(salt), 4096, atoi(size),
+            MD5);
         /* sets key */
         CamelliaSetKey(&cam, key, CAMELLIA_BLOCK_SIZE, iv);
 
         /* change length to remove iv block from being decrypted */
-        length-=CAMELLIA_BLOCK_SIZE;
+        length-=(CAMELLIA_BLOCK_SIZE + sizeof(salt));
         for (i = 0; i < length; i++) {
             /* shifts message over an encryption block: ignores iv on message*/
-            input[i] = input[i + CAMELLIA_BLOCK_SIZE];
+            input[i] = input[i + (CAMELLIA_BLOCK_SIZE + sizeof(salt))];
         }
         /* decrypts the message to output based on input */
         CamelliaCbcDecrypt(&cam, output, input, length);
 
+        /* reduces length based on salt size */
+        length -= sizeof(salt);
         /* reduces length based on number of padded elements */
-        inputLength -= output[length-1];
+        length -= output[length-1];
 
         /* writes output to the outFile based on shortened length */
-        fwrite(output, 1, inputLength - CAMELLIA_BLOCK_SIZE, outFile);
+        fwrite(output, 1, length, outFile);
     }
     /* closes the opened files */
     fclose(inFile);
@@ -116,19 +140,43 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key)
 void help()
 {
     printf("\n~~~~~~~~~~~~~~~~~~~~|Help|~~~~~~~~~~~~~~~~~~~~~\n\n");
-    printf("Usage: ./camellia-encrypt <-option> <file.in> <file.out>\n\n");
+    printf("Usage: ./camellia-encrypt <-option> <KeySize> <file.in> "
+        "<file.out>\n\n");
     printf("Options\n");
     printf("-d    Decpription\n-e    Encryption\n-h    Help\n");
 }
+void NoEcho(char* key)
+{
+    struct termios oflags, nflags;
+
+    /* disabling echo */
+    tcgetattr(fileno(stdin), &oflags);
+    nflags = oflags;
+    nflags.c_lflag &= ~ECHO;
+    nflags.c_lflag |= ECHONL;
+
+    if (tcsetattr(fileno(stdin), TCSANOW, &nflags) != 0) {
+        printf("Error\n");
+    }
+
+    printf("Key: ");
+    fgets(key, sizeof(key), stdin);
+    key[strlen(key) - 1] = 0;
+
+    /* restore terminal */
+    if (tcsetattr(fileno(stdin), TCSANOW, &oflags) != 0) {
+        printf("Error\n");
+    }
+}
 int main(int argc, char** argv)
 {
-    int option;
-    char* key;
+    int option = 0;
+    byte key[64];
 
-    if (argc != 4) /* if number of arguments is not 4 'help' */
+    if (argc != 5) /* if number of arguments is not 5 'help' */
         help();
     else {
-        key = getpass("Key: ");
+        NoEcho((char*)key);
         while ((option = getopt(argc, argv, "deh:")) != -1) {
             switch (option) {
                 case 'd': /* if entered decrypt */
@@ -144,7 +192,7 @@ int main(int argc, char** argv)
                     abort();
             }
         }
-        CamelliaTest(argv[2], argv[3], key);
+        CamelliaTest(argv[3], argv[4], key, argv[2]);
     }
     return 0;
 }
