@@ -136,7 +136,8 @@ int main(int argc, char** argv)
 
     /* keeps trying to connect to the socket until it is able to do so */
     while (ret != 0) 
-        ret = connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)); 
+        ret = connect(sockfd, (struct sockaddr *) &servAddr, 
+            sizeof(ServAddr)); 
 
     Security(sockfd);
 
