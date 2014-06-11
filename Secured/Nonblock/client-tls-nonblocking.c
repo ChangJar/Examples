@@ -51,8 +51,10 @@ int ClientGreet(int sock, CYASSL* ssl)
     while(err == SSL_FATAL_ERROR) 
         err = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE);
     printf("Recieved: \t%s\n", rcvBuff);
+    
     return 0;
 }
+
 /* 
  * applies TLS 1.2 security layer to data being sent.
  */
@@ -85,8 +87,10 @@ int Security(int sock)
     CyaSSL_free(ssl);
     CyaSSL_CTX_free(ctx);
     CyaSSL_Cleanup();
+    
     return 0;
 }
+
 /* 
  * Command line argumentCount and argumentValues 
  */
@@ -128,5 +132,6 @@ int main(int argc, char** argv)
         err = connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)); 
 
     Security(sockfd);
+    
     return 0;
 }
