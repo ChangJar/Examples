@@ -35,22 +35,22 @@
 int ClientGreet(int sock, CYASSL* ssl)
 {
     /* data to send to the server, data recieved from the server */
-    char send[MAXDATASIZE], receive[MAXDATASIZE];
+    char sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
     int err;                            /* varible for error checks */
 
     printf("Message for server:\t");
-    fgets(send, MAXDATASIZE, stdin);
+    fgets(sendBuff, MAXDATASIZE, stdin);
 
-    err = CyaSSL_write(ssl, send, strlen(send));
+    err = CyaSSL_write(ssl, sendBuff, strlen(sendBuff));
     /* continue trying to send if getting an error trying */
     while(err == SSL_FATAL_ERROR) 
-        err = CyaSSL_write(ssl, send, strlen(send));
+        err = CyaSSL_write(ssl, sendBuff, strlen(sendBuff));
 
-    err = CyaSSL_read(ssl, receive, MAXDATASIZE);
+    err = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE);
     /* continue trying to recive if getting an error trying */
     while(err == SSL_FATAL_ERROR) 
-        err = CyaSSL_read(ssl, receive, MAXDATASIZE);
-    printf("Recieved: \t%s\n", receive);
+        err = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE);
+    printf("Recieved: \t%s\n", rcvBuff);
     return 0;
 }
 /* 

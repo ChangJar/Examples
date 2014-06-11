@@ -29,6 +29,7 @@
 #define DES3_BLOCK_SIZE 24               /* size of encryption blocks */
 
 char choice;                             /* option entered in commandline */
+int padCounter = 0;                      /* number of padded bytes */
 
 int GenerateKey(byte* key, char* sz, byte* salt)
 {
@@ -36,11 +37,13 @@ int GenerateKey(byte* key, char* sz, byte* salt)
     int size = atoi(sz);
     int ret;
 
-    ret = RNG_GenerateBlock(&rng, salt, sizeof(salt));
+    ret = RNG_GenerateBlock(&rng, salt, sizeof(salt)-1);
     if (ret != 0) {
         printf("Could not Randomly Generate Block\n");
         return -1020;
     }
+    if (padCounter > 0)
+        salt[0] = 1;
     ret = PBKDF2(key, key, strlen(key), salt, sizeof(salt), 4096, size, MD5);
     if (ret != 0) {
         printf("Could not stretch key\n");
@@ -62,7 +65,6 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
     int i;                              /* loop counter */
 	int ret;                            /* return variable for errors */
     long numBlocks;                     /* number of encryption blocks */
-	int padCounter = 0;                 /* number of padded bytes */
 
     /* finds the end of inFile to determine length  */
 	fseek(inFile, 0, SEEK_END);
@@ -72,9 +74,11 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
 
     length = inputLength;
     /* pads the length until it evenly matches a block / increases pad number*/
-    while (length % DES3_BLOCK_SIZE != 0) {
-        length++;
-        padCounter++;
+    if (choice == 'e') {
+        while (length % DES3_BLOCK_SIZE != 0) {
+            length++;
+            padCounter++;
+        }
     }
 
     byte input[length];                 /* actual message */
@@ -94,7 +98,6 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
     numBlocks = length / DES3_BLOCK_SIZE;
 
     byte output[DES3_BLOCK_SIZE * numBlocks];/* outFile message[] */
-printf("%lu\n", strlen(key));
 
 	if (choice == 'e') {
         /* if encryption was the chosen option
@@ -110,7 +113,6 @@ printf("%lu\n", strlen(key));
             printf("Could not Generate Key\n");
             return -1040;
         }
-printf("%lu\n", strlen(key));
         ret = Des3_SetKey(&enc, key, iv, DES_ENCRYPTION);
         if (ret != 0)
             return -1001;
@@ -144,7 +146,6 @@ printf("%lu\n", strlen(key));
             printf("Could not stretch Key\n");
             return -1050;
         }
-printf("%lu\n", strlen(key));
         /* sets key */
         ret = Des3_SetKey(&dec, key, iv, DES_DECRYPTION);
         if (ret != 0)
@@ -161,13 +162,10 @@ printf("%lu\n", strlen(key));
 		if (ret != 0)
 			return -1006;
 
-        /* reduces length based on salt size */
-        length -= sizeof(salt)*2;
-        if (length % DES3_BLOCK_SIZE == 0) {
+        if (salt[0] != 0) {
             /* reduces length based on number of padded elements */
             length -= output[length-1];
         }
-printf("Length %d\n", length);
 
         /* writes output to the outFile based on shortened length */
      	fwrite(output, 1, length, outFile);
@@ -175,7 +173,6 @@ printf("Length %d\n", length);
     /* closes the opened files */
 	fclose(inFile);
     fclose(outFile);
-
 	return 0;
 }
 void help()

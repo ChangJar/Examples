@@ -34,7 +34,7 @@
 int ClientGreet(int sock, CYASSL* ssl)
 {
     /* data to send to the server, data recieved from the server */
-    char    sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE];
+    char    sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
     int     err;                            /* variable for error checking */
 
     printf("Message for server:\t");

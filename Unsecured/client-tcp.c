@@ -33,8 +33,8 @@
 int ClientGreet(int sock)
 {
     /* data to send to the server, data recieved from the server */
-    char    sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE];
-    int     err;
+    char    sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
+    int     err = 0;
 
     printf("Message for server:\t");
     fgets(sendBuff, MAXDATASIZE, stdin);

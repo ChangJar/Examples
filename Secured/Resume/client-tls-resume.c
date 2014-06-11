@@ -34,7 +34,7 @@
 int ClientGreet(int sock, CYASSL* ssl)
 {
     /* data to send to the server, data recieved from the server */
-    char sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE];
+    char sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
     int err;
 
     printf("Message for server:\t");
@@ -95,6 +95,7 @@ int Security(int sock, struct sockaddr_in addr)
     
     /* saves the session */
     session = CyaSSL_get_session(ssl);
+    CyaSSL_free(ssl);
     
     /* new ssl to reconnect to */
     sslResume = CyaSSL_new(ctx);
@@ -124,9 +125,9 @@ int Security(int sock, struct sockaddr_in addr)
     
     /* checks to see if the new session is the same as the old session */
     if (CyaSSL_session_reused(sslResume))
-        printf("reused session id\n"); 
+        printf("Re-used session ID\n"); 
     else
-        printf("didn't reuse session id!!!\n");
+        printf("Did not re-use session ID\n");
     
     /* regreet the client */
     ClientGreet(sock, sslResume);
