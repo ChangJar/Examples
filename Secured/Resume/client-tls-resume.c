@@ -23,10 +23,12 @@
 #include    <string.h>
 #include    <errno.h>
 #include    <arpa/inet.h>
-#include    <cyassl/ssl.h>          /* cyaSSL security library */
+#include    <cyassl/ssl.h>          /* CyaSSL security library */
 
-#define MAXDATASIZE  4096   /* maximum acceptable amount of data */
-#define SERV_PORT    11111  /* define default port number */
+#define MAXDATASIZE  4096           /* maximum acceptable amount of data */
+#define SERV_PORT    11111          /* define default port number */
+
+const char* cert = "../ca-cert.pem";
 
 /* 
  * clients initial contact with server. (socket to connect, security layer)
@@ -35,38 +37,41 @@ int ClientGreet(int sock, CYASSL* ssl)
 {
     /* data to send to the server, data recieved from the server */
     char sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
-    int err;
+    int ret = 0;
 
     printf("Message for server:\t");
     fgets(sendBuff, MAXDATASIZE, stdin);
 
     if (CyaSSL_write(ssl, sendBuff, strlen(sendBuff)) != strlen(sendBuff)) {
         /* the message is not able to send, or error trying */
-        err = errno;
-        printf("Write error: errno: %i\n", err);
+        ret = CyaSSL_get_error(ssl, 0);
+        printf("Write error: Error: %i\n", ret);
         return EXIT_FAILURE;
     }
 
     if (CyaSSL_read(ssl, rcvBuff, MAXDATASIZE) == 0) {
         /* the server failed to send data, or error trying */
-        err = errno;
-        printf("Read error. errno: %i\n", err);
+        ret = CyaSSL_get_error(ssl, 0);
+        printf("Read error. Error: %i\n", ret);
         return EXIT_FAILURE;
     }
     printf("Recieved: \t%s\n", rcvBuff);
-    return 0;
+
+    return ret;
 }
+
 /* 
  * applies TLS 1.2 security layer to data being sent.
  */
 int Security(int sock, struct sockaddr_in addr)
 {
-    CyaSSL_Init();              /* initialize CyaSSL (must be done first) */
     CYASSL_CTX*     ctx;        /* cyassl context */
     CYASSL*         ssl;        /* create CYASSL object */
     CYASSL_SESSION* session = 0;/* cyassl session */
     CYASSL*         sslResume;  /* create CYASSL object for connection loss */
-    int             err;
+    int             ret;
+
+    CyaSSL_Init();              /* initialize CyaSSL (must be done first) */
 
     /* create and initiLize CYASSL_CTX structure */
     if ((ctx = CyaSSL_CTX_new(CyaTLSv1_2_client_method())) == NULL) {
@@ -75,9 +80,8 @@ int Security(int sock, struct sockaddr_in addr)
     }
 
     /* load CA certificates into CyaSSL_CTX. which will verify the server */
-    if (CyaSSL_CTX_load_verify_locations(ctx, "../ca-cert.pem",0) != 
-            SSL_SUCCESS) {
-        printf("Error loading ./certs/ca-cert.pem. Please check the file.\n");
+    if (CyaSSL_CTX_load_verify_locations(ctx, cert, 0) != SSL_SUCCESS) {
+        printf("Error loading %s. Please check the file.\n", cert);
         return EXIT_FAILURE;
     }
 
@@ -89,9 +93,12 @@ int Security(int sock, struct sockaddr_in addr)
     CyaSSL_set_fd(ssl, sock);
     
     /* connects to CyaSSL */
-    CyaSSL_connect(ssl);
+    ret = CyaSSL_connect(ssl);
+    if (ret != SSL_SUCCESS) {
+        return ret;
+    }
     
-    ClientGreet(sock, ssl);
+    ret = ClientGreet(sock, ssl);
     
     /* saves the session */
     session = CyaSSL_get_session(ssl);
@@ -112,8 +119,8 @@ int Security(int sock, struct sockaddr_in addr)
     /* connects to new socket */
     if (connect(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         /* if socket fails to connect to the server*/
-        err = errno;
-        printf("Connect error. errno: %i\n", err);
+        ret = CyaSSL_get_error(ssl, 0);
+        printf("Connect error. Error: %i\n", ret);
         return EXIT_FAILURE;
     }
     
@@ -121,7 +128,10 @@ int Security(int sock, struct sockaddr_in addr)
     CyaSSL_set_fd(sslResume, sock);
     
     /* reconects to CyaSSL */
-    CyaSSL_connect(sslResume);
+    ret = CyaSSL_connect(sslResume);
+    if (ret != SSL_SUCCESS) {
+        return ret;
+    }
     
     /* checks to see if the new session is the same as the old session */
     if (CyaSSL_session_reused(sslResume))
@@ -130,14 +140,16 @@ int Security(int sock, struct sockaddr_in addr)
         printf("Did not re-use session ID\n");
     
     /* regreet the client */
-    ClientGreet(sock, sslResume);
+    ret = ClientGreet(sock, sslResume);
 
     /* frees all data before client termination */
     CyaSSL_free(sslResume);
     CyaSSL_CTX_free(ctx);
     CyaSSL_Cleanup();
-    return 0;
+
+    return ret;
 }
+
 /* 
  * Command line argumentCount and argumentValues 
  */
@@ -145,7 +157,7 @@ int main(int argc, char** argv)
 {
     int     sockfd;                         /* socket file descriptor */
     struct  sockaddr_in servAddr;           /* struct for server address */
-    int     err;                                /* variable for error checking */
+    int     ret;                            /* variable for error checking */
 
     if (argc != 2) {
         /* if the number of arguments is not two, error */
@@ -168,16 +180,18 @@ int main(int argc, char** argv)
     /* looks for the server at the entered address (ip in the command line) */
     if (inet_pton(AF_INET, argv[1], &servAddr.sin_addr) < 1) {
         /* checks validity of address */
-        err = errno;
-        printf("Invalid Address. errno: %i\n", err);
+        ret = errno;
+        printf("Invalid Address. Error: %i\n", ret);
         return EXIT_FAILURE;
     }
 
     if (connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
         /* if socket fails to connect to the server*/
-        printf("Connect error. errno: %i\n", errno);
+        ret = errno;
+        printf("Connect error. Error: %i\n", ret);
         return EXIT_FAILURE;
     }
     Security(sockfd, servAddr);
-    return 0;
+
+    return ret;
 }

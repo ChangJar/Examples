@@ -37,13 +37,15 @@ int GenerateKey(byte* key, char* sz, byte* salt)
     int size = atoi(sz);
     int ret;
 
+    InitRng(&rng);
+
     ret = RNG_GenerateBlock(&rng, salt, sizeof(salt)-1);
     if (ret != 0) {
         printf("Could not Randomly Generate Block\n");
         return -1020;
     }
-    if (padCounter > 0)
-        salt[0] = 1;
+    if (padCounter == 0)
+        salt[0] = 0;
     ret = PBKDF2(key, key, strlen(key), salt, sizeof(salt), 4096, size, MD5);
     if (ret != 0) {
         printf("Could not stretch key\n");
@@ -58,13 +60,13 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
 
 	Des3 enc;                           /* 3DES for encoding */
 	Des3 dec;                           /* 3DES for decoding */
-    RNG rng;
+    RNG rng;                            /* random number generator */
 
     /* Initialization vector: used for randomness of encryption */
     byte iv[DES3_BLOCK_SIZE];           /* should be random or pseudorandom */
-    int i;                              /* loop counter */
-	int ret;                            /* return variable for errors */
-    long numBlocks;                     /* number of encryption blocks */
+    int i = 0;                          /* loop counter */
+	int ret = 0;                        /* return variable for errors */
+    long numBlocks = 0;                 /* number of encryption blocks */
 
     /* finds the end of inFile to determine length  */
 	fseek(inFile, 0, SEEK_END);
@@ -82,7 +84,7 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
     }
 
     byte input[length];                 /* actual message */
-    byte salt[8];
+    byte salt[8] = {0};
 
     /* reads from inFile and wrties whatever is there to the input array */
     ret = fread(input, 1, inputLength, inFile);
@@ -98,6 +100,8 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
     numBlocks = length / DES3_BLOCK_SIZE;
 
     byte output[DES3_BLOCK_SIZE * numBlocks];/* outFile message[] */
+
+    InitRng(&rng);
 
 	if (choice == 'e') {
         /* if encryption was the chosen option
@@ -186,7 +190,6 @@ void help()
 int NoEcho(char* key)
 {
     struct termios oflags, nflags;
-    int ret = 0;
 
     /* disabling echo */
     tcgetattr(fileno(stdin), &oflags);
@@ -196,7 +199,7 @@ int NoEcho(char* key)
 
     if (tcsetattr(fileno(stdin), TCSANOW, &nflags) != 0) {
         printf("Error\n");
-        ret = -1060;
+        return -1060;
     }
 
     printf("Key: ");
@@ -206,9 +209,9 @@ int NoEcho(char* key)
     /* restore terminal */
     if (tcsetattr(fileno(stdin), TCSANOW, &oflags) != 0) {
         printf("Error\n");
-        ret = -1070;
+        return -1070;
     }
-    return ret;
+    return 0;
 }
 int main(int argc, char** argv)
 {

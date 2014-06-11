@@ -25,30 +25,46 @@
 #include <cyassl/ctaocrypt/pwdbased.h>
 #include <cyassl/ctaocrypt/camellia.h>
 
-char choice;
+char choice;                        /* option entered in commandline */
+int padCounter = 0;                 /* number of padded bytes */
 
-void GenerateKey(byte* key, char* sz, byte* salt)
+int GenerateKey(byte* key, char* sz, byte* salt)
 {
     RNG rng;
     int size = atoi(sz);
+    int ret;
 
-    RNG_GenerateBlock(&rng, salt, 8);
-    PBKDF2(key, key, sizeof(key), salt, 8, 4096, size, MD5);
+    InitRng(&rng);
+
+    ret = RNG_GenerateBlock(&rng, salt, 8);
+    if (ret != 0) {
+        printf("Could not Randomly Generate Block\n");
+        return -1020;
+    }
+    if (padCounter > 0)
+        salt[0] = 1;
+    ret = PBKDF2(key, key, sizeof(key), salt, 8, 4096, size, MD5);
+    if (ret != 0) {
+        printf("Could not stretch key\n");
+        return -1030;
+    }
+    return 0;
 }
 int CamelliaTest(char* fileIn, char* fileOut, byte* key, char* size)
 {
-    FILE* inFile =  fopen(fileIn, "ra");/* file used to take message from */
+    FILE* inFile =  fopen(fileIn, "r");/* file used to take message from */
     FILE* outFile = fopen(fileOut, "wa");/* file made to wrtie message to */
 
     Camellia cam;                       /* camellia for encoding/decoding */
     RNG rng;                            /* random number generator */
+    
+    InitRng(&rng);
 
     /* Initialization vector: used for randomness of encryption */
     byte iv[CAMELLIA_BLOCK_SIZE];       /* should be random or pseudorandom */
     int i = 0;                          /* loop counter */
     int ret = 0;                        /* return variable for errors */
     long numBlocks = 0;                 /* number of ASE blocks for encoding */
-    int padCounter = 0;                 /* number of padded bytes */
 
     /* finds the end of inFile to determine length */
     fseek(inFile, 0, SEEK_END);
@@ -58,9 +74,11 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key, char* size)
     
     length = inputLength;    
     /* pads the length until it evenly matches a block / increases pad number*/
-    while(length % CAMELLIA_BLOCK_SIZE != 0) {
-        length++;
-        padCounter++;
+    if (choice == 'e') {
+        while(length % CAMELLIA_BLOCK_SIZE != 0) {
+            length++;
+            padCounter++;
+        }
     }
 
     byte input[length];                 /* actual message */
@@ -128,8 +146,10 @@ int CamelliaTest(char* fileIn, char* fileOut, byte* key, char* size)
         /* reduces length based on number of padded elements */
         length -= output[length-1];
 
-        /* writes output to the outFile based on shortened length */
-        fwrite(output, 1, length, outFile);
+        if (salt[0] != 0) {
+            /* writes output to the outFile based on shortened length */
+            fwrite(output, 1, length, outFile);
+        }
     }
     /* closes the opened files */
     fclose(inFile);
