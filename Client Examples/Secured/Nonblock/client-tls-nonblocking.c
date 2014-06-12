@@ -122,14 +122,21 @@ int ClientGreet(CYASSL* ssl)
         printf("Write error: Error: %d\n", ret);
         return EXIT_FAILURE;
     }
-    do { /* ---------This loop is broken, jackass--------- */
-        if ((ret = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE)) <= 0) {
-            /* the server failed to send data, or error trying */
+
+    ret = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE);   
+    if (ret <= 0) {
+        /* the server failed to send data, or error trying */
+        ret = CyaSSL_get_error(ssl, 0);
+        while (ret == SSL_ERROR_WANT_READ) {
+            ret = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE);
+            ret = CyaSSL_get_error(ssl, 0);
+        }
+        if (ret < 0) {
             ret = CyaSSL_get_error(ssl, 0);
             printf("Read error. Error: %d\n", ret);
             return EXIT_FAILURE;
         }
-    }while (ret != SSL_SUCCESS && ret == SSL_ERROR_WANT_READ);
+    }
     printf("Recieved: \t%s\n", rcvBuff);
 
     return ret;
