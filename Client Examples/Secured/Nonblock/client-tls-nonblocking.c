@@ -1,4 +1,4 @@
-/* client-tls-resume.c
+/* client-tls-nonblocking.c
  *
  * Copyright (C) 2006-2014 wolfSSL Inc.
  *
@@ -24,16 +24,90 @@
 #include    <errno.h>
 #include    <arpa/inet.h>
 #include    <cyassl/ssl.h>          /* CyaSSL security library */
+#include    <fcntl.h>               /* nonblocking I/O library */
 
 #define MAXDATASIZE  4096           /* maximum acceptable amount of data */
 #define SERV_PORT    11111          /* define default port number */
 
 const char* cert = "../ca-cert.pem";
 
+/*
+ * enum used for tcp_select function 
+ */
+enum {
+    TEST_SELECT_FAIL,
+    TEST_TIMEOUT,
+    TEST_RECV_READY,
+    TEST_ERROR_READY
+};
+
+static inline int tcp_select(int socketfd, int to_sec)
+{
+    fd_set recvfds, errfds;
+    int nfds = socketfd + 1;
+    struct timeval timeout = { (to_sec > 0) ? to_sec : 0, 0};
+    int result;
+
+    FD_ZERO(&recvfds);
+    FD_SET(socketfd, &recvfds);
+    FD_ZERO(&errfds);
+    FD_SET(socketfd, &errfds);
+
+    result = select(nfds, &recvfds, NULL, &errfds, &timeout);
+
+    if (result == 0)
+        return TEST_TIMEOUT;
+    else if (result > 0) {
+        if (FD_ISSET(socketfd, &recvfds))
+            return TEST_RECV_READY;
+        else if(FD_ISSET(socketfd, &errfds))
+            return TEST_ERROR_READY;
+    }
+
+    return TEST_SELECT_FAIL;
+}
+int NonBlockConnect(CYASSL* ssl)
+{
+    int ret = CyaSSL_connect(ssl);
+
+    int error = CyaSSL_get_error(ssl, 0);
+    int sockfd = (int)CyaSSL_get_fd(ssl);
+    int select_ret;
+
+    while (ret != SSL_SUCCESS && (error == SSL_ERROR_WANT_READ ||
+                                  error == SSL_ERROR_WANT_WRITE)) {
+        int currTimeout = 1;
+
+        if (error == SSL_ERROR_WANT_READ)
+            printf("... server would read block\n");
+        else
+            printf("... server would write block\n");
+
+        select_ret = tcp_select(sockfd, currTimeout);
+
+        if ((select_ret == TEST_RECV_READY) ||
+                                        (select_ret == TEST_ERROR_READY)) {
+                    ret = CyaSSL_connect(ssl);
+            error = CyaSSL_get_error(ssl, 0);
+        }
+        else if (select_ret == TEST_TIMEOUT) {
+            error = SSL_ERROR_WANT_READ;
+        }
+        else {
+            error = SSL_FATAL_ERROR;
+        }
+    }
+    if (ret != SSL_SUCCESS){
+        printf("SSL_connect failed\n");
+        exit(0);
+    }
+    return ret;
+}
+
 /* 
  * clients initial contact with server. (socket to connect, security layer)
  */
-int ClientGreet(int sock, CYASSL* ssl)
+int ClientGreet(CYASSL* ssl)
 {
     /* data to send to the server, data recieved from the server */
     char sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
@@ -45,16 +119,17 @@ int ClientGreet(int sock, CYASSL* ssl)
     if (CyaSSL_write(ssl, sendBuff, strlen(sendBuff)) != strlen(sendBuff)) {
         /* the message is not able to send, or error trying */
         ret = CyaSSL_get_error(ssl, 0);
-        printf("Write error: Error: %i\n", ret);
+        printf("Write error: Error: %d\n", ret);
         return EXIT_FAILURE;
     }
-
-    if (CyaSSL_read(ssl, rcvBuff, MAXDATASIZE) == 0) {
-        /* the server failed to send data, or error trying */
-        ret = CyaSSL_get_error(ssl, 0);
-        printf("Read error. Error: %i\n", ret);
-        return EXIT_FAILURE;
-    }
+    do { /* ---------This loop is broken, jackass--------- */
+        if ((ret = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE)) <= 0) {
+            /* the server failed to send data, or error trying */
+            ret = CyaSSL_get_error(ssl, 0);
+            printf("Read error. Error: %d\n", ret);
+            return EXIT_FAILURE;
+        }
+    }while (ret != SSL_SUCCESS && ret == SSL_ERROR_WANT_READ);
     printf("Recieved: \t%s\n", rcvBuff);
 
     return ret;
@@ -63,15 +138,13 @@ int ClientGreet(int sock, CYASSL* ssl)
 /* 
  * applies TLS 1.2 security layer to data being sent.
  */
-int Security(int sock, struct sockaddr_in addr)
+int Security(int sock)
 {
-    CYASSL_CTX*     ctx;        /* cyassl context */
-    CYASSL*         ssl;        /* create CYASSL object */
-    CYASSL_SESSION* session = 0;/* cyassl session */
-    CYASSL*         sslResume;  /* create CYASSL object for connection loss */
-    int             ret;
+    CYASSL_CTX* ctx;
+    CYASSL*     ssl;    /* create CYASSL object */ 
+    int         ret = 0;
 
-    CyaSSL_Init();              /* initialize CyaSSL (must be done first) */
+    CyaSSL_Init();      /* initialize CyaSSL */
 
     /* create and initiLize CYASSL_CTX structure */
     if ((ctx = CyaSSL_CTX_new(CyaTLSv1_2_client_method())) == NULL) {
@@ -80,7 +153,8 @@ int Security(int sock, struct sockaddr_in addr)
     }
 
     /* load CA certificates into CyaSSL_CTX. which will verify the server */
-    if (CyaSSL_CTX_load_verify_locations(ctx, cert, 0) != SSL_SUCCESS) {
+    if (CyaSSL_CTX_load_verify_locations(ctx, cert, 0) != 
+            SSL_SUCCESS) {
         printf("Error loading %s. Please check the file.\n", cert);
         return EXIT_FAILURE;
     }
@@ -91,62 +165,16 @@ int Security(int sock, struct sockaddr_in addr)
     }
 
     CyaSSL_set_fd(ssl, sock);
-    
-    /* connects to CyaSSL */
-    ret = CyaSSL_connect(ssl);
-    if (ret != SSL_SUCCESS) {
-        return ret;
+    CyaSSL_set_using_nonblock(ssl, 1);
+    ret = NonBlockConnect(ssl);
+    if (ret == SSL_SUCCESS) {
+        ret = ClientGreet(ssl);
     }
-    
-    ret = ClientGreet(sock, ssl);
-    
-    /* saves the session */
-    session = CyaSSL_get_session(ssl);
-    CyaSSL_free(ssl);
-    
-    /* new ssl to reconnect to */
-    sslResume = CyaSSL_new(ctx);
-    
-    /* closes the connection */
-    close(sock);
-    
-    /* makes a new socket to connect to */
-    sock =  socket(AF_INET, SOCK_STREAM, 0);
-    
-    /* sets session to old session */
-    CyaSSL_set_session(sslResume, session);
-    
-    /* connects to new socket */
-    if (connect(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        /* if socket fails to connect to the server*/
-        ret = CyaSSL_get_error(ssl, 0);
-        printf("Connect error. Error: %i\n", ret);
-        return EXIT_FAILURE;
-    }
-    
-    /* sets new file discriptior */
-    CyaSSL_set_fd(sslResume, sock);
-    
-    /* reconects to CyaSSL */
-    ret = CyaSSL_connect(sslResume);
-    if (ret != SSL_SUCCESS) {
-        return ret;
-    }
-    
-    /* checks to see if the new session is the same as the old session */
-    if (CyaSSL_session_reused(sslResume))
-        printf("Re-used session ID\n"); 
-    else
-        printf("Did not re-use session ID\n");
-    
-    /* regreet the client */
-    ret = ClientGreet(sock, sslResume);
-
     /* frees all data before client termination */
-    CyaSSL_free(sslResume);
+    CyaSSL_free(ssl);
     CyaSSL_CTX_free(ctx);
     CyaSSL_Cleanup();
-
+    
     return ret;
 }
 
@@ -157,7 +185,7 @@ int main(int argc, char** argv)
 {
     int     sockfd;                         /* socket file descriptor */
     struct  sockaddr_in servAddr;           /* struct for server address */
-    int     ret;                            /* variable for error checking */
+    int ret = 10;                           /* variable for error checks */
 
     if (argc != 2) {
         /* if the number of arguments is not two, error */
@@ -167,15 +195,16 @@ int main(int argc, char** argv)
 
     /* internet address family, stream based tcp, default protocol */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-
     if (sockfd < 0) {
-        printf("Failed to create socket. errono: %i\n", errno);
+        ret = errno;
+        printf("Failed to create socket. Error: %i\n", ret);
         return EXIT_FAILURE;
     }
-
-    memset(&servAddr, 0, sizeof(servAddr)); /* clears memory block for use */  
+    
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);     /* sets socket to non-blocking */
+    memset(&servAddr, 0, sizeof(servAddr));     /* clears memory block for use */
     servAddr.sin_family = AF_INET;          /* sets addressfamily to internet*/
-    servAddr.sin_port = htons(SERV_PORT);   /* sets port to defined port */
+    servAddr.sin_port = htons(SERV_PORT);   /* sets port to defined port */  
 
     /* looks for the server at the entered address (ip in the command line) */
     if (inet_pton(AF_INET, argv[1], &servAddr.sin_addr) < 1) {
@@ -185,13 +214,12 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    if (connect(sockfd, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
-        /* if socket fails to connect to the server*/
-        ret = errno;
-        printf("Connect error. Error: %i\n", ret);
-        return EXIT_FAILURE;
-    }
-    Security(sockfd, servAddr);
+    /* keeps trying to connect to the socket until it is able to do so */
+    while (ret != 0) 
+        ret = connect(sockfd, (struct sockaddr *) &servAddr, 
+            sizeof(servAddr)); 
+
+    Security(sockfd);
 
     return ret;
 }

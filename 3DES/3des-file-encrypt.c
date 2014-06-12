@@ -31,51 +31,60 @@
 char choice;                             /* option entered in commandline */
 int padCounter = 0;                      /* number of padded bytes */
 
-int GenerateKey(byte* key, char* sz, byte* salt)
+/*
+ * Makes a cyptographically secure key by stretching a user entered key
+ */
+int GenerateKey(RNG* rng, byte* key, char* sz, byte* salt)
 {
-    RNG rng;
     int size = atoi(sz);
     int ret;
 
-    InitRng(&rng);
-
-    ret = RNG_GenerateBlock(&rng, salt, sizeof(salt)-1);
-    if (ret != 0) {
-        printf("Could not Randomly Generate Block\n");
+    ret = RNG_GenerateBlock(rng, salt, sizeof(salt)-1);
+    if (ret != 0)
         return -1020;
-    }
-    if (padCounter == 0)
-        salt[0] = 0;
+
+    if (padCounter == 0)        /* sets first value of salt to check if the */
+        salt[0] = 0;            /* message is padded */
+
+    /* stretches key */
     ret = PBKDF2(key, key, strlen(key), salt, sizeof(salt), 4096, size, MD5);
-    if (ret != 0) {
-        printf("Could not stretch key\n");
+    if (ret != 0)
         return -1030;
-    }
+
     return 0;
 }
+
+/*
+ * Encrypts/Decrypts a file using 3DES 
+ */
 int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
 {
-	FILE* inFile =	fopen(fileIn, "r"); /* file used to take message from */
-	FILE* outFile =	fopen(fileOut, "w");/* file made to write messge to */
+	FILE*   inFile = fopen(fileIn, "r");/* file used to take message from */
+	FILE*   outFile = fopen(fileOut, "w");/* file made to write message to */
 
-	Des3 enc;                           /* 3DES for encoding */
-	Des3 dec;                           /* 3DES for decoding */
-    RNG rng;                            /* random number generator */
+	Des3    enc;                        /* 3DES for encoding */
+	Des3    dec;                        /* 3DES for decoding */
+    RNG     rng;                        /* random number generator */
 
     /* Initialization vector: used for randomness of encryption */
-    byte iv[DES3_BLOCK_SIZE];           /* should be random or pseudorandom */
-    int i = 0;                          /* loop counter */
-	int ret = 0;                        /* return variable for errors */
-    long numBlocks = 0;                 /* number of encryption blocks */
+    byte    iv[DES3_BLOCK_SIZE];        /* should be random or pseudorandom */
+    byte*   input;                      /* array for inFile info */
+    byte*   output;                     /* array for outFile info */ 
+    byte    salt[8] = {0};              /* salt used for decryption purposes */
+
+    int     i = 0;                      /* loop counter */
+	int     ret = 0;                    /* return variable for errors */
+    long    numBlocks = 0;              /* number of encryption blocks */
+    int     inputLength;                /* length of message */
+    int     length;                     /* length of input after padding */
 
     /* finds the end of inFile to determine length  */
 	fseek(inFile, 0, SEEK_END);
-    int inputLength = ftell(inFile);    /* length of message */
+    inputLength = ftell(inFile); 
     fseek(inFile, 0, SEEK_SET);
-    int length;                         /* length of input after padding */
 
-    length = inputLength;
     /* pads the length until it evenly matches a block / increases pad number*/
+    length = inputLength;
     if (choice == 'e') {
         while (length % DES3_BLOCK_SIZE != 0) {
             length++;
@@ -83,8 +92,7 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
         }
     }
 
-    byte input[length];                 /* actual message */
-    byte salt[8] = {0};
+    input = malloc(length);         /* sets size of input */
 
     /* reads from inFile and wrties whatever is there to the input array */
     ret = fread(input, 1, inputLength, inFile);
@@ -96,27 +104,26 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
         /* padds the added characters with the number of pads */
         input[i] = padCounter;
     }
-    /*  finds the number of encoding blocks to be used*/
+    /* finds the number of encoding blocks to be used */
     numBlocks = length / DES3_BLOCK_SIZE;
 
-    byte output[DES3_BLOCK_SIZE * numBlocks];/* outFile message[] */
+    output = malloc(DES3_BLOCK_SIZE * numBlocks);   /* sets size of output */
 
-    InitRng(&rng);
+    InitRng(&rng);                    /* initializes random number generator */
 
 	if (choice == 'e') {
         /* if encryption was the chosen option
         set encryption key. must have key to decrypt */
         ret = RNG_GenerateBlock(&rng, iv, DES3_BLOCK_SIZE);
-        if (ret != 0) {
-            printf("Could not Randomly Generate Block\n");
+        if (ret != 0)
             return -1020;
-        }
-        /* sets key */
-        ret = GenerateKey(key, size, salt);
-        if (ret != 0) {
-            printf("Could not Generate Key\n");
+
+        /* stretches key to fit size*/
+        ret = GenerateKey(&rng, key, size, salt);
+        if (ret != 0) 
             return -1040;
-        }
+
+        /* sets key */
         ret = Des3_SetKey(&enc, key, iv, DES_ENCRYPTION);
         if (ret != 0)
             return -1001;
@@ -126,11 +133,9 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
 		if (ret != 0)
 			return -1005;
 
-        /* writes salt to outFile */
+        /* writes to outFile */
         fwrite(salt, 1, sizeof(salt), outFile);
-        /* writes iv to outFile */
         fwrite(iv, 1, DES3_BLOCK_SIZE, outFile);
-        /* writes output to outFile */
 		fwrite(output, 1, length, outFile);
 	}
 	if (choice == 'd') {
@@ -143,20 +148,20 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
             /* finds iv from input message */
             iv[i - sizeof(salt)] = input[i];
         }
-        /* replicates old key if keys match */
+
+        /* replicates old key if entered keys match */
         ret = PBKDF2(key, key, strlen(key), salt, sizeof(salt), 4096, 
             atoi(size), MD5);
-        if (ret != 0) {
-            printf("Could not stretch Key\n");
+        if (ret != 0)
             return -1050;
-        }
+
         /* sets key */
         ret = Des3_SetKey(&dec, key, iv, DES_DECRYPTION);
         if (ret != 0)
             return -1002;
 
         /* change length to remove iv block from being decrypted */
-        length-=(DES3_BLOCK_SIZE + sizeof(salt));
+        length -= (DES3_BLOCK_SIZE + sizeof(salt));
         for (i = 0; i < length; i++) {
             /* shifts message over an encryption block: ignores iv on message*/
             input[i] = input[i + (DES3_BLOCK_SIZE + sizeof(salt))];
@@ -174,20 +179,32 @@ int Des3Test(char* fileIn, char* fileOut, byte* key, char* size)
         /* writes output to the outFile based on shortened length */
      	fwrite(output, 1, length, outFile);
 	}
-    /* closes the opened files */
+    /* closes the opened files and frees the memory*/
+    free(input);
+    free(output);
+    free(key);
 	fclose(inFile);
     fclose(outFile);
+
 	return 0;
 }
+
+/*
+ * help message
+ */
 void help()
 {
 	printf("\n~~~~~~~~~~~~~~~~~~~~|Help|~~~~~~~~~~~~~~~~~~~~~\n\n");
     printf("Usage: ./3des-file-encrypt <-option> <KeySize> <file.in> "
         "<file.out>\n\n");
     printf("Options\n");
-    printf("-d    Decpription\n-e    Encryption\n-h    Help\n");
+    printf("-d    Decryption\n-e    Encryption\n-h    Help\n");
 }
-int NoEcho(char* key)
+
+/*
+ * temporarily deisables echoing in terminal for secure key input
+ */
+int NoEcho(char* key, char* size)
 {
     struct termios oflags, nflags;
 
@@ -203,7 +220,7 @@ int NoEcho(char* key)
     }
 
     printf("Key: ");
-    fgets(key, 64, stdin);
+    fgets(key, atoi(size), stdin);
     key[strlen(key) - 1] = 0;
 
     /* restore terminal */
@@ -213,16 +230,26 @@ int NoEcho(char* key)
     }
     return 0;
 }
+
 int main(int argc, char** argv)
 {
-	int option;
-    byte key[64];
-    int ret = 0;
+	int    option;    /* choice of how to run program */
+    byte*  key;       /* user entered key */
+    int    ret = 0;   /* return value */
 
-	if (argc != 5) /* if number of arguments is not 5 'help' */
+	if (argc != 5) {
+        /* if number of arguments is not 5 'help' */
         help();
+    } 
+    else if (atoi(argv[2]) != 56 && atoi(argv[2]) != 112 && 
+        atoi(argv[2]) != 168) {
+        /* if the entered size does not match acceptable size */
+        printf("Invalid 3DES key size\n");
+        ret = -1080;
+    }
     else {
-        ret = NoEcho((char*)key);
+        key = malloc(atoi(argv[2]));    /* sets size memory of key */
+        ret = NoEcho((char*)key, argv[2]);
         while ((option = getopt(argc, argv, "deh:")) != -1) {
             switch (option) {
                 case 'd': /* if entered decrypt */
@@ -240,5 +267,6 @@ int main(int argc, char** argv)
         }
         ret = Des3Test(argv[3], argv[4], key, argv[2]);
     }
+
 	return ret;
 }
