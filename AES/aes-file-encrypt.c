@@ -23,25 +23,28 @@
 #include <termios.h>
 #include <cyassl/options.h>
 #include <cyassl/ctaocrypt/aes.h>
+#include <cyassl/ctaocrypt/sha256.h>
 #include <cyassl/ctaocrypt/random.h>
 #include <cyassl/ctaocrypt/pwdbased.h>
 
-char choice;                             /* option entered in commandline */
-int padCounter = 0;                      /* number of padded bytes */
+#define SALT_SIZE 8
 
-int GenerateKey(RNG* rng, byte* key, char* sz, byte* salt)
+/*
+ * Makes a cyptographically secure key by stretching a user entered key
+ */
+int GenerateKey(RNG* rng, byte* key, int size, byte* salt, int pad)
 {
-    int size = atoi(sz);
     int ret;
 
-    ret = RNG_GenerateBlock(rng, salt, sizeof(salt)-1);
+    ret = RNG_GenerateBlock(rng, salt, SALT_SIZE);
     if (ret != 0)
         return -1020;
 
-    if (padCounter == 0)
+    if (pad == 0)
         salt[0] = 0;
 
-    ret = PBKDF2(key, key, strlen(key), salt, sizeof(salt), 4096, size, MD5);
+    /* stretches key */
+    ret = PBKDF2(key, key, strlen(key), salt, SALT_SIZE, 4096, size, SHA256);
     if (ret != 0)
         return -1030;
 
@@ -49,45 +52,37 @@ int GenerateKey(RNG* rng, byte* key, char* sz, byte* salt)
 }
 
 /*
- * Encrypts/Decrypts a file using AES 
+ * Encrypts a file using AES 
  */
-
-int AesTest(char* fileIn, char* fileOut, byte* key, char* size)
+int AesEncrypt(Aes* aes, byte* key, int size, FILE* inFile, FILE* outFile)
 {
-    FILE*   inFile =  fopen(fileIn, "r"); /* file used to take message from */
-    FILE*   outFile = fopen(fileOut, "w");/* file made to write messge to */
+    RNG     rng;
+    byte    iv[AES_BLOCK_SIZE];
+    byte*   input;
+    byte*   output;
+    byte    salt[SALT_SIZE] = {0};
 
-    Aes     enc;                        /* 3DES for encoding */
-    Aes     dec;                        /* 3DES for decoding */
-    RNG     rng;                        /* random number generator */
+    int     i = 0;
+    int     ret = 0;
+    int     inputLength;
+    int     length;
+    int     padCounter = 0;
 
-    /* Initialization vector: used for randomness of encryption */
-    byte    iv[AES_BLOCK_SIZE];        /* should be random or pseudorandom */
-    byte*   input;                      /* array for inFile info */
-    byte*   output;                     /* array for outFile info */ 
-    byte    salt[8] = {0};              /* salt used for decryption purposes */
-
-    int     i = 0;                      /* loop counter */
-    int     ret = 0;                    /* return variable for errors */
-    long    numBlocks = 0;              /* number of encryption blocks */
-    int     inputLength;                /* length of message */
-    int     length;                     /* length of input after padding */
-
-    /* finds the end of inFile to determine length  */
     fseek(inFile, 0, SEEK_END);
-    inputLength = ftell(inFile); 
+    inputLength = ftell(inFile);
     fseek(inFile, 0, SEEK_SET);
 
     length = inputLength;
     /* pads the length until it evenly matches a block / increases pad number*/
-    if (choice == 'e') {
-        while (length % AES_BLOCK_SIZE != 0) {
-            length++;
-            padCounter++;
-        }
+    while (length % AES_BLOCK_SIZE != 0) {
+        length++;
+        padCounter++;
     }
 
-    input = malloc(length);         /* sets size of input */
+    input = malloc(length);
+    output = malloc(length);
+
+    InitRng(&rng);
 
     /* reads from inFile and wrties whatever is there to the input array */
     ret = fread(input, 1, inputLength, inFile);
@@ -99,82 +94,118 @@ int AesTest(char* fileIn, char* fileOut, byte* key, char* size)
         /* padds the added characters with the number of pads */
         input[i] = padCounter;
     }
-    /*  finds the number of encoding blocks to be used*/
-    numBlocks = length / AES_BLOCK_SIZE;
 
-    output = malloc(AES_BLOCK_SIZE * numBlocks);   /* sets size of output */
+    ret = RNG_GenerateBlock(&rng, iv, AES_BLOCK_SIZE);
+    if (ret != 0)
+        return -1020;
 
-    InitRng(&rng);                    /* initializes random number generator */
+    /* stretches key to fit size */
+    ret = GenerateKey(&rng, key, size, salt, padCounter);
+    if (ret != 0) 
+        return -1040;
 
-    if (choice == 'e') {
-        /* if encryption was the chosen option
-        set encryption key. must have key to decrypt */
-        ret = RNG_GenerateBlock(&rng, iv, AES_BLOCK_SIZE);
-        if (ret != 0)
-            return -1020;
+    /* sets key */
+    ret = AesSetKey(aes, key, AES_BLOCK_SIZE, iv, AES_ENCRYPTION);
+    if (ret != 0)
+        return -1001;
 
-        /* stretches key to fit size*/
-        ret = GenerateKey(&rng, key, size, salt);
-        if (ret != 0) 
-            return -1040;
+    /* encrypts the message to the ouput based on input length + padding */
+    ret = AesCbcEncrypt(aes, output, input, length);
+    if (ret != 0)
+        return -1005;
 
-        /* sets key */
-        ret = AesSetKey(&enc, key, AES_BLOCK_SIZE, iv, AES_ENCRYPTION);
-        if (ret != 0)
-            return -1001;
+    /* writes to outFile */
+    fwrite(salt, 1, SALT_SIZE, outFile);
+    fwrite(iv, 1, AES_BLOCK_SIZE, outFile);
+    fwrite(output, 1, length, outFile);
 
-        /* encrypts the message to the ouput based on input length + padding */
-        ret = AesCbcEncrypt(&enc, output, input, length);
-        if (ret != 0)
-            return -1005;
-
-        /* writes to outFile */
-        fwrite(salt, 1, sizeof(salt), outFile);
-        fwrite(iv, 1, AES_BLOCK_SIZE, outFile);
-        fwrite(output, 1, length, outFile);
-    }
-    if (choice == 'd') {
-        /* if decryption was the chosen option */
-        for (i = 0; i < sizeof(salt); i++) {
-            /* finds salt from input message */
-            salt[i] = input[i];
-        }
-        for (i = sizeof(salt); i < AES_BLOCK_SIZE + sizeof(salt); i++) {
-            /* finds iv from input message */
-            iv[i - sizeof(salt)] = input[i];
-        }
-
-        /* replicates old key if keys match */
-        ret = PBKDF2(key, key, strlen(key), salt, sizeof(salt), 4096, 
-            atoi(size), MD5);
-        if (ret != 0)
-            return -1050;
-
-        /* sets key */
-        ret = AesSetKey(&dec, key, AES_BLOCK_SIZE, iv, AES_DECRYPTION);
-        if (ret != 0)
-            return -1002;
-
-        /* change length to remove iv block from being decrypted */
-        length -= (AES_BLOCK_SIZE + sizeof(salt));
-        for (i = 0; i < length; i++) {
-            /* shifts message over an encryption block: ignores iv on message*/
-            input[i] = input[i + (AES_BLOCK_SIZE + sizeof(salt))];
-        }
-        /* decrypts the message to output based on input length + padding*/
-        ret = AesCbcDecrypt(&dec, output, input, length);
-        if (ret != 0)
-            return -1006;
-
-        if (salt[0] != 0) {
-            /* reduces length based on number of padded elements */
-            length -= output[length-1];
-        }
-
-        /* writes output to the outFile based on shortened length */
-        fwrite(output, 1, length, outFile);
-    }
     /* closes the opened files and frees the memory*/
+    memset(input, 0, length);
+    memset(output, 0, length);
+    memset(key, 0, size);
+    free(input);
+    free(output);
+    free(key);
+    fclose(inFile);
+    fclose(outFile);
+
+    return 0;
+}
+
+/*
+ * Decryptsr a file using AES 
+ */
+int AesDecrypt(Aes* aes, byte* key, int size, FILE* inFile, FILE* outFile)
+{
+    RNG     rng;
+    byte    iv[AES_BLOCK_SIZE];
+    byte*   input;
+    byte*   output;
+    byte    salt[SALT_SIZE] = {0};
+
+    int     i = 0;
+    int     ret = 0;
+    int     length;
+    int     aSize;
+
+    fseek(inFile, 0, SEEK_END);
+    length = ftell(inFile);
+    fseek(inFile, 0, SEEK_SET);
+    aSize = length;
+
+    input = malloc(aSize);
+    output = malloc(aSize);
+
+    InitRng(&rng);
+
+    /* reads from inFile and wrties whatever is there to the input array */
+    ret = fread(input, 1, length, inFile);
+    if (ret == 0) {
+        printf("Input file does not exist.\n");
+        return -1010;
+    }
+    for (i = 0; i < SALT_SIZE; i++) {
+        /* finds salt from input message */
+        salt[i] = input[i];
+    }
+printf("%d\n", salt[0]);
+    for (i = SALT_SIZE; i < AES_BLOCK_SIZE + SALT_SIZE; i++) {
+        /* finds iv from input message */
+        iv[i - SALT_SIZE] = input[i];
+    }
+
+    /* replicates old key if keys match */
+    ret = PBKDF2(key, key, strlen(key), salt, SALT_SIZE, 4096, size, SHA256);
+    if (ret != 0)
+        return -1050;
+
+    /* sets key */
+    ret = AesSetKey(aes, key, AES_BLOCK_SIZE, iv, AES_DECRYPTION);
+    if (ret != 0)
+        return -1002;
+
+    /* change length to remove salt/iv block from being decrypted */
+    length -= (AES_BLOCK_SIZE + SALT_SIZE);
+    for (i = 0; i < length; i++) {
+        /* shifts message: ignores salt/iv on message*/
+        input[i] = input[i + (AES_BLOCK_SIZE + SALT_SIZE)];
+    }
+    /* decrypts the message to output based on input length + padding*/
+    ret = AesCbcDecrypt(aes, output, input, length);
+    if (ret != 0)
+        return -1006;
+
+    if (salt[0] != 0) {
+        /* reduces length based on number of padded elements */
+        length -= output[length-1];
+    }
+    /* writes output to the outFile based on shortened length */
+    fwrite(output, 1, length, outFile);
+
+    /* closes the opened files and frees the memory*/
+    memset(input, 0, aSize);
+    memset(output, 0, aSize);
+    memset(key, 0, size);
     free(input);
     free(output);
     free(key);
@@ -190,7 +221,7 @@ int AesTest(char* fileIn, char* fileOut, byte* key, char* size)
 void help()
 {
     printf("\n~~~~~~~~~~~~~~~~~~~~|Help|~~~~~~~~~~~~~~~~~~~~~\n\n");
-    printf("Usage: ./3des-file-encrypt <-option> <KeySize> <file.in> "
+    printf("Usage: ./aes-file-encrypt <-option> <KeySize> <file.in> "
         "<file.out>\n\n");
     printf("Options\n");
     printf("-d    Decryption\n-e    Encryption\n-h    Help\n");
@@ -199,7 +230,7 @@ void help()
 /*
  * temporarily deisables echoing in terminal for secure key input
  */
-int NoEcho(char* key, char* size)
+int NoEcho(char* key, int size)
 {
     struct termios oflags, nflags;
 
@@ -215,7 +246,7 @@ int NoEcho(char* key, char* size)
     }
 
     printf("Key: ");
-    fgets(key, atoi(size), stdin);
+    fgets(key, size, stdin);
     key[strlen(key) - 1] = 0;
 
     /* restore terminal */
@@ -226,41 +257,68 @@ int NoEcho(char* key, char* size)
     return 0;
 }
 
-int main(int argc, char** argv)
+int SizeCheck(int size)
 {
-    int    option;    /* choice of how to run program */
-    byte*  key;       /* user entered key */
-    int    ret = 0;   /* return value */
+    int ret = 0;
 
-    if (argc != 5) {
-        /* if number of arguments is not 5 'help' */
-        help();
-    } 
-    else if (atoi(argv[2]) != 128 && atoi(argv[2]) != 192 && 
-        atoi(argv[2]) != 256) {
+    if (size != 128 && size != 192 && size != 256) {
         /* if the entered size does not match acceptable size */
         printf("Invalid AES key size\n");
         ret = -1080;
     }
-    else {
-        key = malloc(atoi(argv[2]));    /* sets size memory of key */
-        ret = NoEcho((char*)key, argv[2]);
-        while ((option = getopt(argc, argv, "deh:")) != -1) {
-            switch (option) {
-                case 'd': /* if entered decrypt */
-                    choice = 'd';
-                    break;
-                case 'e': /* if entered encrypt */
-                    choice = 'e';
-                    break;
-                case 'h': /* if entered 'help' */
-                    help();
-                    break;
-                default:
-                    abort();
-            }
+
+    return ret;
+}
+
+int main(int argc, char** argv)
+{
+    Aes    aes;
+    byte*  key;       /* user entered key */
+    FILE*  inFile;
+    FILE*  outFile;
+
+    const char* in;
+    const char* out;
+
+    int    option;    /* choice of how to run program */
+    int    ret = 0;   /* return value */
+    int    size = 0;
+    char   choice;
+
+    while ((option = getopt(argc, argv, "d:e:i:o:h")) != -1) {
+        switch (option) {
+            case 'd': /* if entered decrypt */
+                size = atoi(optarg);
+                ret = SizeCheck(size);
+                choice = 'd';
+                break;
+            case 'e': /* if entered encrypt */
+                size = atoi(optarg);
+                ret = SizeCheck(size);
+                choice = 'e';
+                break;
+            case 'h': /* if entered 'help' */
+                help();
+                break;
+            case 'i': /* input file */
+                in = optarg;
+                inFile = fopen(in, "r");
+                break;
+            case 'o': /* output file */
+                out = optarg;
+                outFile = fopen(out, "w");
+                break;
+            default:
+                abort();
         }
-        ret = AesTest(argv[3], argv[4], key, argv[2]);
+    }
+    if (ret == 0) {
+        key = malloc(size);    /* sets size memory of key */
+        ret = NoEcho((char*)key, size);
+        if (choice == 'e')
+            AesEncrypt(&aes, key, size, inFile, outFile);
+        else if (choice == 'd')
+            AesDecrypt(&aes, key, size, inFile, outFile);
     }
 
     return ret;
