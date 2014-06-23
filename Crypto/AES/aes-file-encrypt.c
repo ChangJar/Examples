@@ -168,7 +168,6 @@ int AesDecrypt(Aes* aes, byte* key, int size, FILE* inFile, FILE* outFile)
         /* finds salt from input message */
         salt[i] = input[i];
     }
-printf("%d\n", salt[0]);
     for (i = SALT_SIZE; i < AES_BLOCK_SIZE + SALT_SIZE; i++) {
         /* finds iv from input message */
         iv[i - SALT_SIZE] = input[i];
