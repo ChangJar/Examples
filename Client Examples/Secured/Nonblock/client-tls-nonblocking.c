@@ -29,7 +29,7 @@
 #define MAXDATASIZE  4096           /* maximum acceptable amount of data */
 #define SERV_PORT    11111          /* define default port number */
 
-const char* cert = "../ca-cert.pem";
+const char* cert = "..../certs/ca-cert.pem";
 
 /*
  * enum used for tcp_select function 
@@ -112,6 +112,7 @@ int ClientGreet(CYASSL* ssl)
     /* data to send to the server, data recieved from the server */
     char sendBuff[MAXDATASIZE], rcvBuff[MAXDATASIZE] = {0};
     int ret = 0;
+int count = 0;
 
     printf("Message for server:\t");
     fgets(sendBuff, MAXDATASIZE, stdin);
@@ -128,9 +129,11 @@ int ClientGreet(CYASSL* ssl)
         /* the server failed to send data, or error trying */
         ret = CyaSSL_get_error(ssl, 0);
         while (ret == SSL_ERROR_WANT_READ) {
+count++;
             ret = CyaSSL_read(ssl, rcvBuff, MAXDATASIZE);
             ret = CyaSSL_get_error(ssl, 0);
         }
+printf("counter %d\n", count);
         if (ret < 0) {
             ret = CyaSSL_get_error(ssl, 0);
             printf("Read error. Error: %d\n", ret);
