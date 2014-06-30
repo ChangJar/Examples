@@ -1,7 +1,7 @@
 CC=gcc
 
 simple-server: simple-server.c
-	$(CC) -o simple-server simple-server.c -lcyassl
+	$(CC) -Wall -o simple-server simple-server.c -lcyassl
 
 .PHONY: clean
 

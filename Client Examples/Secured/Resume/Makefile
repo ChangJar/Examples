@@ -1,7 +1,7 @@
 CC=gcc
 
 client-tls-resume: client-tls-resume.c
-	$(CC) -o client-tls-resume client-tls-resume.c -lcyassl
+	$(CC) -Wall -o client-tls-resume client-tls-resume.c -lcyassl
 
 .PHONY: clean
 

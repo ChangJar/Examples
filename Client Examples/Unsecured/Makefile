@@ -1,7 +1,7 @@
 CC=gcc
 
 client-tcp: client-tcp.c
-	$(CC) -o client-tcp client-tcp.c 
+	$(CC) -Wall -o client-tcp client-tcp.c 
 
 .PHONY: clean
 

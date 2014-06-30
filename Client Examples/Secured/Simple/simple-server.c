@@ -36,7 +36,7 @@ int main(int argc, char** argv)
 	if (ret > 0) {
 		buff[ret] = '\0';
 		printf("Recieved: %s\n", buff);
-		if (ret = CyaSSL_write(ssl, reply, sizeof(reply)-1) < 0)
+		if ((ret = CyaSSL_write(ssl, reply, sizeof(reply)-1)) < 0)
 			err_sys("bad cyassl write");
 	} else
 		err_sys("bad cyassl read");
