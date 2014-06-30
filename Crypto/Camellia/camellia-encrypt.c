@@ -44,7 +44,8 @@ int GenerateKey(RNG* rng, byte* key, int size, byte* salt, int pad)
         salt[0] = 0;            /* message is padded */
 
     /* stretches key */
-    ret = PBKDF2(key, key, strlen(key), salt, SALT_SIZE, 4096, size, SHA256);
+    ret = PBKDF2(key, key, strlen((const char*)key), salt, SALT_SIZE, 4096, 
+        size, SHA256);
     if (ret != 0)
         return -1030;
 
@@ -174,7 +175,8 @@ int CamelliaDecrypt(Camellia* cam, byte* key, int size, FILE* inFile,
     }
 
     /* replicates old key if keys match */
-    ret = PBKDF2(key, key, strlen(key), salt, SALT_SIZE, 4096, size, SHA256);
+    ret = PBKDF2(key, key, strlen((const char*)key), salt, SALT_SIZE, 4096, 
+        size, SHA256);
     if (ret != 0)
         return -1050;
 
@@ -251,6 +253,7 @@ int NoEcho(char* key, int size)
         printf("Error\n");
         return -1070;
     }
+    return 0;
 }
 
 int SizeCheck(int size)
@@ -279,7 +282,7 @@ int main(int argc, char** argv)
     int    option;    /* choice of how to run program */
     int    ret = 0;   /* return value */
     int    size = 0;
-    char   choice;
+    char   choice = 'n';
 
     while ((option = getopt(argc, argv, "d:e:i:o:h")) != -1) {
         switch (option) {
@@ -308,13 +311,16 @@ int main(int argc, char** argv)
                 abort();
         }
     }
-    if (ret == 0) {
+    if (ret == 0 && choice != 'n') {
         key = malloc(size);    /* sets size memory of key */
         ret = NoEcho((char*)key, size);
         if (choice == 'e')
             CamelliaEncrypt(&cam, key, size, inFile, outFile);
         else if (choice == 'd')
             CamelliaDecrypt(&cam, key, size, inFile, outFile);
+    }
+    else if (choice == 'n') {
+        printf("Must select either -e or -d for encryption and decryption\n");
     }
 
     return ret;
