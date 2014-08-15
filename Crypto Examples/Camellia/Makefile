@@ -1,9 +1,11 @@
 CC=gcc
+CFLAGS=-Wall
+LIBS= -lcyassl
 
-camellia-encrypt: camellia-encrypt.c
-	$(CC) -Wall -o camellia-encrypt camellia-encrypt.c -lcyassl 
+camellia-encrypt: camellia-encrypt.o
+	$(CC) -o $@ $^ $(CFLAGS) $(LIBS) 
 
 .PHONY: clean
 
 clean:
-	find . \! -name camellia-encrypt.c \! -name Makefile \! -name README -delete
+	rm -f *.o camellia-encrypt

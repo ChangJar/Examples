@@ -1,9 +1,11 @@
 CC=gcc
+CFLAGS=-Wall
+LIBS= -lcyassl
 
-3des-file-encrypt: 3des-file-encrypt.c
-	$(CC) -Wall -o 3des-file-encrypt 3des-file-encrypt.c -lcyassl
+3des-file-encrypt: 3des-file-encrypt.o
+	$(CC) -o $@ $^ $(CFLAGS) $(LIBS) 
 
 .PHONY: clean
 
 clean:
-	find . \! -name 3des-file-encrypt.c \! -name Makefile \! -name README -delete
+	rm -f *.o 3des-file-encrypt

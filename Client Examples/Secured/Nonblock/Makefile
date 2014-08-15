@@ -1,4 +1,4 @@
-CC=gcc
+CC=clang
 
 client-tls-nonblocking: client-tls-nonblocking.c
 	$(CC) -Wall -o client-tls-nonblocking client-tls-nonblocking.c -lcyassl

@@ -84,7 +84,11 @@ int Des3Encrypt(Des3* des3, byte* key, int size, FILE* inFile, FILE* outFile)
     input = malloc(length);
     output = malloc(length);
 
-    InitRng(&rng);
+    ret = InitRng(&rng);
+    if (ret != 0) {
+        printf("Failed to initialize random number generator\n");
+        return -1030;
+    }
 
     /* reads from inFile and wrties whatever is there to the input array */
     ret = fread(input, 1, inputLength, inFile);
@@ -222,8 +226,8 @@ int Des3Decrypt(Des3* des3, byte* key, int size, FILE* inFile, FILE* outFile)
  */
 void help()
 {
-	printf("\n~~~~~~~~~~~~~~~~~~~~|Help|~~~~~~~~~~~~~~~~~~~~~\n\n");
-    printf("Usage: ./3des-file-encrypt <-option> <KeySize> <file.in> "
+    printf("\n~~~~~~~~~~~~~~~~~~~~|Help|~~~~~~~~~~~~~~~~~~~~~\n\n");
+    printf("Usage: ./3des-encrypt <-option> <KeySize> <file.in> "
         "<file.out>\n\n");
     printf("Options\n");
     printf("-d    Decryption\n-e    Encryption\n-h    Help\n");
@@ -284,6 +288,8 @@ int main(int argc, char** argv)
 
     int    option;    /* choice of how to run program */
     int    ret = 0;   /* return value */
+    int    inCheck = 0;
+    int    outCheck = 0;
     int    size = 0;
     char   choice = 'n';
 
@@ -304,17 +310,30 @@ int main(int argc, char** argv)
                 break;
             case 'i': /* input file */
                 in = optarg;
+                inCheck = 1;
                 inFile = fopen(in, "r");
                 break;
             case 'o': /* output file */
                 out = optarg;
+                outCheck = 1;
                 outFile = fopen(out, "w");
                 break;
+            case '?':
+                if (optopt) {
+                    printf("Ending Session\n");
+                    return -111;
+                }
             default:
                 abort();
         }
     }
-    if (ret == 0 && choice != 'n') {
+
+    if (inCheck == 0 || outCheck == 0) {
+            printf("Must have both input and output file");
+            printf(": -i filename -o filename\n");
+    }
+
+    else if (ret == 0 && choice != 'n') {
         key = malloc(size);    /* sets size memory of key */
         ret = NoEcho((char*)key, size);
         if (choice == 'e')

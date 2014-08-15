@@ -1,9 +1,11 @@
 CC=gcc
+CFLAGS=-Wall
+LIBS= -lcyassl
 
-aes-file-encrypt: aes-file-encrypt.c
-	$(CC) -Wall -o aes-file-encrypt aes-file-encrypt.c -lcyassl
+aes-file-encrypt: aes-file-encrypt.o
+	$(CC) -o $@ $^ $(CFLAGS) $(LIBS) 
 
 .PHONY: clean
 
 clean:
-	find . \! -name aes-file-encrypt.c \! -name Makefile \! -name README -delete
+	rm -f *.o aes-file-encrypt
